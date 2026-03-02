@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.locations_schemas import LocationCreate, LocationResponse
-from app.crud import location_crud 
+from app.crud import location_crud
 from app.db.database import (
     get_async_session,
-) 
+)
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
 
@@ -35,7 +35,6 @@ async def search_locations(
     return [loc for loc in locations]
 
 
-
 @router.get("/", response_model=list[LocationResponse])
 async def read_locations(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_async_session)
@@ -52,7 +51,3 @@ async def read_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     return location
-
-
-
-

@@ -11,11 +11,13 @@ from app.middlerware.auth import GatewayAuthMiddleware
 # Инициализируем логирование при старте модуля
 logging.config.dictConfig(LOGGING_CONFIG)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.info("Service is starting up...")
     yield
     logging.info("Service is shutting down...")
+
 
 def create_app() -> FastAPI:
     """Фабрика для создания и настройки приложения."""
@@ -32,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(location_router)
 
     return app
+
 
 # Создаем инстанс приложения для сервера (Uvicorn/Gunicorn)
 app = create_app()

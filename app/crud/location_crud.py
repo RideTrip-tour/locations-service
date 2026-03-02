@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.schemas.locations_schemas import LocationCreate,LocationResponse
+from app.schemas.locations_schemas import LocationCreate, LocationResponse
 from app.db.models import Location
 
 
@@ -26,16 +26,9 @@ async def search_locations(
 
     # 📍 Гео-фильтр
     if latitude and longitude and radius_km:
-        point = func.ST_SetSRID(
-            func.ST_MakePoint(longitude, latitude),
-            4326
-        )
+        point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
         conditions.append(
-            ST_DWithin(
-                Location.coordinates,
-                point,
-                radius_km * 1000  # метры
-            )
+            ST_DWithin(Location.coordinates, point, radius_km * 1000)  # метры
         )
 
     # 🌤 Фильтр по сезону
@@ -62,6 +55,7 @@ async def search_locations(
 
     result = await db.execute(query)
     return result.scalars().all()
+
 
 ### 1. Создание (Create)
 async def create_location(db: AsyncSession, location_in: LocationCreate) -> Location:
