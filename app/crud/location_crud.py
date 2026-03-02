@@ -1,8 +1,67 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.schemas.locations_schemas import LocationCreate
+from app.schemas.locations_schemas import LocationCreate,LocationResponse
 from app.db.models import Location
 
+
+from sqlalchemy import select, and_
+from sqlalchemy.sql import func
+from geoalchemy2.functions import ST_DWithin
+from app.db.models import Location
+
+
+async def search_locations(
+    db: AsyncSession,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    radius_km: float | None = None,
+    season_month: int | None = None,
+    has_airport: bool | None = None,
+    has_railway_station: bool | None = None,
+    has_bus_station: bool | None = None,
+):
+    query = select(Location)
+
+    conditions = []
+
+    # 📍 Гео-фильтр
+    if latitude and longitude and radius_km:
+        point = func.ST_SetSRID(
+            func.ST_MakePoint(longitude, latitude),
+            4326
+        )
+        conditions.append(
+            ST_DWithin(
+                Location.coordinates,
+                point,
+                radius_km * 1000  # метры
+            )
+        )
+
+    # 🌤 Фильтр по сезону
+    if season_month:
+        conditions.append(
+            and_(
+                Location.season_start_month <= season_month,
+                Location.season_end_month >= season_month,
+            )
+        )
+
+    # 🚆 Транспорт
+    if has_airport is not None:
+        conditions.append(Location.has_airport == has_airport)
+
+    if has_railway_station is not None:
+        conditions.append(Location.has_railway_station == has_railway_station)
+
+    if has_bus_station is not None:
+        conditions.append(Location.has_bus_station == has_bus_station)
+
+    if conditions:
+        query = query.where(and_(*conditions))
+
+    result = await db.execute(query)
+    return result.scalars().all()
 
 ### 1. Создание (Create)
 async def create_location(db: AsyncSession, location_in: LocationCreate) -> Location:
