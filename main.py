@@ -25,6 +25,9 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         debug=settings.DEBUG,
         lifespan=lifespan,
+        docs_url="/api/locations/docs",
+        redoc_url="/api/locations/redoc",
+        openapi_url="/api/locations/openapi.json",
     )
 
     # 1. Добавляем мидлвари
