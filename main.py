@@ -1,15 +1,19 @@
 # src/main.py
 import logging.config
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-from config import settings
+from app.middlerware.request_context import user_context_middleware
+from app.routes.locations import router as locations_router
 from app.utils.logging import LOGGING_CONFIG
 from app.routes.location_routes import router as location_router
 from app.middlerware.auth import GatewayAuthMiddleware
 
 # Инициализируем логирование при старте модуля
 logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger("location_service")
+
 
 
 @asynccontextmanager
@@ -22,8 +26,8 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Фабрика для создания и настройки приложения."""
     app = FastAPI(
-        title=settings.APP_NAME,
-        debug=settings.DEBUG,
+        title=settings.app_name,
+        debug=settings.debug,
         lifespan=lifespan,
         docs_url="/api/locations/docs",
         redoc_url="/api/locations/redoc",

@@ -1,9 +1,7 @@
-import asyncio
 from logging.config import fileConfig
 
+from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
@@ -55,6 +53,8 @@ def do_run_migrations(connection: Connection) -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+    In this scenario we need to create an Engine
+    and associate a connection with the context.
 
 async def run_async_migrations() -> None:
     connectable = async_engine_from_config(
@@ -63,10 +63,11 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
 
-    await connectable.dispose()
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 def run_migrations_online() -> None:

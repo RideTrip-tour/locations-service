@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     )
 
     db_driver: str = "postgresql+asyncpg"
+    test_db_name: str = Field(
+        validation_alias="TEST_DB_LOCATION_SERVICE_NAME", default="location_db_test"
+    )
 
     # Конфигурация: говорим Pydantic читать файл .env, если он есть
     model_config = SettingsConfigDict(

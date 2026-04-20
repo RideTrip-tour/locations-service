@@ -1,6 +1,3 @@
-import logging
-import logging.config
-
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -16,12 +13,12 @@ LOGGING_CONFIG = {
         },
     },
     "loggers": {
-        "users": {  # твой логгер
+        "location_service": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
-        "uvicorn": {  # включаем логи uvicorn
+        "uvicorn": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
@@ -29,7 +26,7 @@ LOGGING_CONFIG = {
         "uvicorn.error": {
             "level": "ERROR",
         },
-        "uvicorn.access": {  # access logs
+        "uvicorn.access": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

@@ -1,37 +1,31 @@
-# FastAPI Microservice Template 🚀
+# Location Service
 
-Базовый шаблон для создания микросервисов в экосистеме RideTrip.
-Включает в себя настроенный Docker, асинхронную работу с БД (SQLAlchemy + AsyncPG), миграции (Alembic) и структурированное логирование (Structlog).
+Сервис хранит каталог локаций в отдельной БД и отдаёт API для поиска, фильтрации и избранного.
 
-## 📋 Чек-лист при создании нового сервиса
+## API
 
-Как только вы создали репозиторий из этого шаблона, выполните следующие шаги:
+- `GET /api/locations` - список локаций с фильтрами `search`, `region`, `city`, `country`, `activity_id`, `style`, `level`, `limit`, `offset`;
+- `GET /api/locations/{location_id}` - карточка локации;
+- `GET /api/locations/filters` - доступные значения фильтров;
+- `GET /api/locations/favorites` - избранные локации текущего пользователя;
+- `POST /api/locations/{location_id}/favorite` - добавить в избранное;
+- `DELETE /api/locations/{location_id}/favorite` - удалить из избранного.
 
-1.  **Переименование:**
-    * В `app/core/config.py` измените `APP_NAME` на имя вашего сервиса.
-    * В `pyproject.toml` (или `requirements.txt`) обновите название проекта.
-2.  **Очистка:**
-    * Удалите папку `.git` и инициализируйте новую (если не использовали кнопку "Use this template").
-3.  **Зависимости:**
-    * Добавьте специфичные для сервиса библиотеки (например, `fastapi-users` для Auth или `stripe` для платежей).
+Локации создаются, обновляются и удаляются через отдельную админку. Этот сервис только читает каталог и хранит пользовательские избранные.
 
----
+## Конфигурация
 
-## 🏗 Структура проекта (Куда писать код?)
+Переменные окружения:
 
-Мы используем слоистую архитектуру. Код разносится по папкам в зависимости от ответственности:
+- `DB_LOCATION_SERVICE_HOST`
+- `DB_LOCATION_SERVICE_PORT`
+- `DB_LOCATION_SERVICE_NAME`
+- `DB_LOCATION_SERVICE_USER`
+- `DB_LOCATION_SERVICE_PASS`
 
-| Папка | Зачем нужна? | Пример |
-| :--- | :--- | :--- |
-| **`app/routes`** | **Точки входа (API).** Только обработка HTTP, валидация входных данных и вызов сервисов. Минимум логики. | `POST /users`, `GET /tours/{id}` |
-| **`app/schemas`** | **Pydantic модели.** Валидация данных "на вход" и "на выход". | `UserCreate`, `TourResponse` |
-| **`app/services`** | **Бизнес-логика.** Основной "мозг" сервиса. Здесь принимаются решения, происходят вычисления. | `calculate_price()`, `register_user()` |
-| **`app/crud`** | **Работа с БД.** Только прямые запросы к базе (Create, Read, Update, Delete). Никакой бизнес-логики. | `get_user_by_email()`, `create_order()` |
-| **`app/db`** | **Модели данных.** SQLAlchemy модели (таблицы БД). | `class User(Base): ...` |
-| **`app/middleware`** | **Middleware.** Перехват запросов (логирование, заголовки, CORS). | `ProcessTimeMiddleware` |
-| **`app/utils`** | **Утилиты.** Вспомогательные функции. | Логгер, форматтеры дат и т.д. |
+Для тестовой БД:
 
----
+- `TEST_DB_LOCATION_SERVICE_NAME`
 
 ## 🚀 Как запустить
 
