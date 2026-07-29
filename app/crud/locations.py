@@ -7,7 +7,7 @@ from sqlalchemy import Select, and_, delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
-from app.db.models import FavoriteLocation, Location
+from app.db.models import FavoriteLocation, Location, Activity, Style, Level
 
 T = TypeVar("T", int, str)
 StrFilter = str | Sequence[str]
@@ -78,6 +78,33 @@ def _apply_array_filter(
         .exists()
     )
 
+# Использует .any() для генерации подзапросов EXISTS вместо старого оверлапа массивов (&&)
+def _apply_relationship_filter(
+    statement: Select,
+    relationship_field,
+    target_model,
+    value: IntFilter | StrFilter | None,
+    *,
+    item_type: type[int] | type[str],
+    name_attr: str = "name",
+):
+    if item_type is int:
+        values = _normalize_int_values(value)
+        if not values:
+            return statement.where(false())
+        return statement.where(
+            relationship_field.any(target_model.id.in_(values))
+        )
+
+    values = _normalize_text_values(value)
+    if not values:
+        return statement
+
+    target_attr = getattr(target_model, name_attr)
+    return statement.where(
+        relationship_field.any(func.lower(target_attr).in_(values))
+    )
+
 
 def apply_location_filters(
     statement: Select,
@@ -111,16 +138,16 @@ def apply_location_filters(
     if country:
         statement = _apply_text_filter(statement, Location.country, country)
     if activity_id is not None:
-        statement = _apply_array_filter(
-            statement, Location.activity_ids, activity_id, item_type=int
+        statement = _apply_relationship_filter(
+            statement, Location.activities, Activity, activity_id, item_type=int
         )
     if styles:
-        statement = _apply_array_filter(
-            statement, Location.styles, styles, item_type=str
+        statement = _apply_relationship_filter(
+            statement, Location.styles, Style, styles, item_type=str
         )
     if levels:
-        statement = _apply_array_filter(
-            statement, Location.levels, levels, item_type=str
+        statement = _apply_relationship_filter(
+            statement, Location.levels, Level, levels, item_type=str
         )
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
@@ -285,13 +312,19 @@ async def list_location_filter_options(
         select(Location.country).where(filters).distinct().order_by(Location.country)
     )
     activity_ids_result = await session.execute(
-        select(func.unnest(Location.activity_ids)).where(filters).distinct()
+        select(Activity.id)
+        .where(Activity.locations.any(Location.is_active.is_(True)))
+        .order_by(Activity.id)
     )
     styles_result = await session.execute(
-        select(func.unnest(Location.styles)).where(filters).distinct()
+        select(Style.name)
+        .where(Style.locations.any(Location.is_active.is_(True)))
+        .order_by(Style.name)
     )
     levels_result = await session.execute(
-        select(func.unnest(Location.levels)).where(filters).distinct()
+        select(Level.name)
+        .where(Level.locations.any(Location.is_active.is_(True)))
+        .order_by(Level.name)
     )
 
     return {
@@ -322,7 +355,34 @@ async def admin_create_location(
     session: AsyncSession, locations_in: AdminLocationCreate
 ) -> AdminLocationRead:
     location_data = locations_in.model_dump(exclude_unset=True)
+
+    activity_ids = location_data.pop("activity_ids", [])
+    styles = location_data.pop("styles", [])
+    levels = location_data.pop("levels", [])
+
     new_location = Location(**location_data)
+
+    activities = (
+        await session.execute(
+            select(Activity).where(Activity.id.in_(activity_ids))
+        )
+    ).scalars().all()
+
+    styles = (
+        await session.execute(
+            select(Style).where(Style.name.in_(styles))
+        )
+    ).scalars().all()
+
+    levels = (
+        await session.execute(
+            select(Level).where(Level.name.in_(levels))
+        )
+    ).scalars().all()
+
+    new_location.activities = list(activities)
+    new_location.styles = list(styles)
+    new_location.levels = list(levels)
 
     session.add(new_location)
     await session.commit()

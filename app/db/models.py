@@ -2,11 +2,103 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text, \
+    Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+location_activities = Table(
+    "location_activities",
+    Base.metadata,
+    Column(
+        "location_id",
+        Integer,
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+    Column(
+        "activity_id",
+        Integer,
+        ForeignKey("activities.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+)
+
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    locations: Mapped[list[Location]] = relationship(
+        "Location",
+        secondary=location_activities,
+        back_populates="activities",
+        lazy = "selectin",
+    )
+
+
+location_styles = Table(
+    "location_styles",
+    Base.metadata,
+    Column(
+        "location_id",
+        Integer,
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+    Column(
+        "style_id",
+        Integer,
+        ForeignKey("styles.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+)
+
+class Style(Base):
+    __tablename__ = "styles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True, unique=True)
+
+    locations: Mapped[list[Location]] = relationship(
+        "Location",
+        secondary=location_styles,
+        back_populates="styles",
+        lazy = "selectin",
+    )
+
+
+location_levels = Table(
+    "location_levels",
+    Base.metadata,
+    Column(
+        "location_id",
+        Integer,
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+    Column(
+        "level_id",
+        Integer,
+        ForeignKey("levels.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+)
+
+class Level(Base):
+    __tablename__ = "levels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True, unique=True)
+
+    locations: Mapped[list[Location]] = relationship(
+        "Location",
+        secondary=location_levels,
+        back_populates="levels",
+        lazy="selectin",
+    )
 
 
 class Location(Base):
@@ -26,23 +118,24 @@ class Location(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     distance_to_city_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    activity_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::integer[]"),
+    activities: Mapped[list[Activity]] = relationship(
+        secondary=location_activities,
+        back_populates="locations",
+        lazy="selectin",
     )
-    styles: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
+    @property
+    def activity_ids(self) -> list[int]:
+        return [a.id for a in self.activities] if self.activities else []
+
+    styles: Mapped[list[Style]] = relationship(
+        secondary=location_styles,
+        back_populates="locations",
+        lazy="selectin",
     )
-    levels: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
+    levels: Mapped[list[Level]] = relationship(
+        secondary=location_levels,
+        back_populates="locations",
+        lazy="selectin",
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -62,10 +155,7 @@ class Location(Base):
         Index("ix_locations_country_region_city", "country", "region", "city"),
         Index("ix_locations_region_lower", func.lower(region)),
         Index("ix_locations_city_lower", func.lower(city)),
-        Index("ix_locations_country_lower", func.lower(country)),
-        Index("ix_locations_activity_ids_gin", activity_ids, postgresql_using="gin"),
-        Index("ix_locations_styles_gin", styles, postgresql_using="gin"),
-        Index("ix_locations_levels_gin", levels, postgresql_using="gin"),
+        Index("ix_locations_country_lower", func.lower(country))
     )
 
 
@@ -84,3 +174,6 @@ class FavoriteLocation(Base):
     location: Mapped[Location] = relationship(back_populates="favorites")
 
     __table_args__ = (UniqueConstraint("user_id", "location_id", name="uq_favorite_locations_user_location"),)
+
+
+

@@ -497,7 +497,7 @@ def test_locations_openapi_keeps_activity_id_as_integer_array():
     assert activity_id_schema["anyOf"][0]["items"]["type"] == "integer"
 
 
-def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_for_ids():
+def test_apply_location_filters_uses_case_insensitive_filters_and_m2m_exists():
     statement = apply_location_filters(
         select(Location),
         region=["Краснодарский край", "Карачаево-Черкесия"],
@@ -509,12 +509,15 @@ def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_
     compiled = str(statement.compile(dialect=postgresql.dialect()))
 
     assert "lower(locations.region) IN" in compiled
-    assert "locations.activity_ids &&" in compiled
-    assert "unnest(locations.levels)" in compiled
-    assert "(value)" in compiled
-    assert "lower(" in compiled
+
+    assert "EXISTS" in compiled
+    assert "location_activities" in compiled
+    assert "location_levels" in compiled
+
+    assert "location_levels.level_id" in compiled
+    assert "lower(levels" in compiled
+
     assert "locations.is_active IS true" in compiled
-    assert " AND " in compiled
 
 
 def test_apply_location_filters_empty_activity_ids_match_no_locations():
