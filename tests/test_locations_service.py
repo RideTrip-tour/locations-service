@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.crud.locations import apply_location_filters  # noqa E402
-from app.db.models import Location  # noqa E402
+from app.db.models import Location, Style, Level  # noqa E402
 from app.routes.locations import (  # noqa E402
     _parse_activity_ids,
     _parse_location_id,
@@ -52,8 +52,8 @@ def make_location(**overrides):
         "longitude": 40.206,
         "distance_to_city_km": 70,
         "activity_ids": [12],
-        "styles": ["mountain"],
-        "levels": ["beginner"],
+        "styles": [Style(id=1, name="mountain")],
+        "levels": [Level(id=1, name="beginner")],
         "is_active": True,
         "created_at": "2026-04-13T00:00:00Z",
         "updated_at": "2026-04-13T00:00:00Z",
