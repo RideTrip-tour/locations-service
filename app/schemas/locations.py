@@ -8,6 +8,8 @@ from app.schemas.style import StyleRead
 
 
 class LocationBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    
     name: str = Field(min_length=1, max_length=255)
     region: str = Field(min_length=1, max_length=255)
     city: str | None = Field(default=None, max_length=255)
