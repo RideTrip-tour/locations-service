@@ -96,8 +96,7 @@ class Level(Base):
     locations: Mapped[list[Location]] = relationship(
         "Location",
         secondary=location_levels,
-        back_populates="levels",
-        lazy="selectin",
+        back_populates="levels"
     )
 
 
@@ -120,8 +119,7 @@ class Location(Base):
     distance_to_city_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
     activities: Mapped[list[Activity]] = relationship(
         secondary=location_activities,
-        back_populates="locations",
-        lazy="selectin",
+        back_populates="locations"
     )
     @property
     def activity_ids(self) -> list[int]:
@@ -129,13 +127,11 @@ class Location(Base):
 
     styles: Mapped[list[Style]] = relationship(
         secondary=location_styles,
-        back_populates="locations",
-        lazy="selectin",
+        back_populates="locations"
     )
     levels: Mapped[list[Level]] = relationship(
         secondary=location_levels,
-        back_populates="locations",
-        lazy="selectin",
+        back_populates="locations"
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,

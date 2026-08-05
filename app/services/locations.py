@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.crud.locations import (
     admin_create_location,
@@ -14,8 +15,10 @@ from app.crud.locations import (
     list_location_filter_options,
     list_locations,
     remove_favorite_location,
+    get_existing_values,
 )
 from app.db.database import get_async_session
+from app.db.models import Activity, Style, Level
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
 from app.schemas.locations import (
     FavoriteStateResponse,
@@ -180,6 +183,35 @@ class LocationService:
             )
         return location
 
+    async def _validate_filter_exists(
+            self,
+            column: InstrumentedAttribute,
+            values: list = None,
+            *,
+            label: str
+    ) -> None:
+        if not values:
+            return
+        if not isinstance(values, list):
+            values = [values]
+        found = await get_existing_values(self.session, column, values)
+        missing = set(values) - found
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{label} not found! Missing values: {sorted(missing)}"
+            )
+
+    async def _validate_filters_exists(
+            self,
+            activity_ids: list[int],
+            styles: list[str],
+            levels: list[str],
+    ) -> None:
+        await self._validate_filter_exists(Activity.id, activity_ids, label="Activities")
+        await self._validate_filter_exists(Style.id, styles, label="Styles")
+        await self._validate_filter_exists(Level.id, levels, label="Levels")
+
     async def _list_locations(
         self,
         *,
@@ -195,6 +227,8 @@ class LocationService:
         offset: int = 0,
         user_id: int | None = None,
     ) -> LocationListResponse:
+        await self._validate_filters_exists(activity_id, styles, levels)
+
         locations, total = await list_locations(
             self.session,
             search=search,

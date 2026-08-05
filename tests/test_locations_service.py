@@ -143,11 +143,15 @@ def test_list_locations_enriches_favorites(monkeypatch):
         assert location_ids == [1]
         return {1}
 
+    async def fake_get_existing_values(db, column, values):
+        return set(values)
+
     monkeypatch.setattr("app.services.locations.list_locations", fake_list_locations)
     monkeypatch.setattr(
         "app.services.locations.list_favorite_location_ids",
         fake_list_favorite_location_ids,
     )
+    monkeypatch.setattr("app.services.locations.get_existing_values", fake_get_existing_values)
 
     result = asyncio.run(
         service.list_locations(user_id=7, activity_id=12, limit=20, offset=0)
@@ -170,7 +174,11 @@ def test_list_locations_passes_multi_value_filters(monkeypatch):
         assert kwargs["is_active"] is True
         return [location], 1
 
+    async def fake_get_existing_values(db, column, values):
+        return set(values)
+
     monkeypatch.setattr("app.services.locations.list_locations", fake_list_locations)
+    monkeypatch.setattr("app.services.locations.get_existing_values", fake_get_existing_values)
 
     result = asyncio.run(
         service.list_locations(

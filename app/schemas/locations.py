@@ -3,19 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class StyleRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str = Field(min_length=1, max_length=255)
-
-
-class LevelRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str = Field(min_length=1, max_length=255)
+from app.schemas.level import LevelRead
+from app.schemas.style import StyleRead
 
 
 class LocationBase(BaseModel):
@@ -43,6 +32,7 @@ class LocationRead(LocationBase):
     is_favorite: bool = False
 
 
+# UNUSED: нигде не используется. Предполагаю, что пользователь не должен создавать локации
 class LocationCreate(LocationBase):
     model_config = ConfigDict(from_attributes=True)
 

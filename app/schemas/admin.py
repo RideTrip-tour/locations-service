@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.level import LevelRead
+from app.schemas.style import StyleRead
 
 class AdminLocationBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -13,9 +15,6 @@ class AdminLocationBase(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     distance_to_city_km: int | None = Field(default=None, ge=0)
-    activity_ids: list[int] = Field(default_factory=list)
-    styles: list[str] = Field(default_factory=list)
-    levels: list[str] = Field(default_factory=list)
     is_active: bool = True
     slug: str | None = None
 
@@ -24,12 +23,19 @@ class AdminLocationRead(AdminLocationBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    activity_ids: list[int] = Field(default_factory=list)
+    styles: list[StyleRead] = Field(default_factory=list)
+    levels: list[LevelRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 
 class AdminLocationCreate(AdminLocationBase):
     model_config = ConfigDict(from_attributes=True)
+
+    activity_ids: list[int] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    levels: list[str] = Field(default_factory=list)
 
 
 class AdminLocationListResponse(BaseModel):

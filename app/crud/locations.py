@@ -5,6 +5,7 @@ from typing import TypeVar
 
 from sqlalchemy import Select, and_, delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
 from app.db.models import FavoriteLocation, Location, Activity, Style, Level
@@ -51,7 +52,7 @@ def _apply_text_filter(statement: Select, field, value: StrFilter | None):
         return statement
     return statement.where(func.lower(field).in_(values))
 
-
+# DEPRECATED: после перехода полей activities, styles, levels на m2m связи с location, данный метод не нужен, вместо него используется: _apply_relationship_filter. Не используется с 29.07.2026
 def _apply_array_filter(
     statement: Select,
     field,
@@ -105,6 +106,14 @@ def _apply_relationship_filter(
         relationship_field.any(func.lower(target_attr).in_(values))
     )
 
+async def get_existing_values(
+    session: AsyncSession,
+    column: InstrumentedAttribute,
+    values: list,
+) -> set:
+    result = await session.execute(select(column).where(column.in_(values)))
+    return set(result.scalars().all())
+
 
 def apply_location_filters(
     statement: Select,
@@ -138,17 +147,11 @@ def apply_location_filters(
     if country:
         statement = _apply_text_filter(statement, Location.country, country)
     if activity_id is not None:
-        statement = _apply_relationship_filter(
-            statement, Location.activities, Activity, activity_id, item_type=int
-        )
+        statement = _apply_relationship_filter(statement, Location.activities, Activity, activity_id, item_type=int)
     if styles:
-        statement = _apply_relationship_filter(
-            statement, Location.styles, Style, styles, item_type=str
-        )
+        statement = _apply_relationship_filter(statement, Location.styles, Style, styles, item_type=str)
     if levels:
-        statement = _apply_relationship_filter(
-            statement, Location.levels, Level, levels, item_type=str
-        )
+        statement = _apply_relationship_filter(statement, Location.levels, Level, levels, item_type=str)
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
 
@@ -161,7 +164,11 @@ async def get_location_by_id(
     *,
     only_active: bool = True,
 ) -> Location | None:
-    statement = select(Location).where(Location.id == location_id)
+    statement = select(Location).where(Location.id == location_id).options(
+        selectinload(Location.activities),
+        selectinload(Location.styles),
+        selectinload(Location.levels),
+    )
     if only_active:
         statement = statement.where(Location.is_active.is_(True))
     result = await session.execute(statement)
@@ -169,7 +176,12 @@ async def get_location_by_id(
 
 
 async def get_location_by_slug(session: AsyncSession, slug: str) -> Location | None:
-    result = await session.execute(select(Location).where(Location.slug == slug))
+    result = await session.execute(select(Location).where(Location.slug == slug).options(
+            selectinload(Location.activities),
+            selectinload(Location.styles),
+            selectinload(Location.levels),
+        )
+    )
     return result.scalar_one_or_none()
 
 
@@ -203,7 +215,11 @@ async def list_locations(
     total_statement = select(func.count()).select_from(base_statement.subquery())
     total = await session.scalar(total_statement)
 
-    statement = base_statement.order_by(Location.name).limit(limit).offset(offset)
+    statement = base_statement.order_by(Location.name).limit(limit).offset(offset).options(
+        selectinload(Location.activities),
+        selectinload(Location.styles),
+        selectinload(Location.levels),
+    )
     result = await session.execute(statement)
     return result.scalars().all(), int(total or 0)
 
@@ -244,7 +260,11 @@ async def list_favorite_locations(
     total_statement = select(func.count()).select_from(base_statement.subquery())
     total = await session.scalar(total_statement)
 
-    statement = base_statement.order_by(Location.name).limit(limit).offset(offset)
+    statement = base_statement.order_by(Location.name).limit(limit).offset(offset).options(
+        selectinload(Location.activities),
+        selectinload(Location.styles),
+        selectinload(Location.levels),
+    )
     result = await session.execute(statement)
     return result.scalars().all(), int(total or 0)
 
@@ -259,7 +279,12 @@ async def list_favorite_location_ids(
         FavoriteLocation.user_id == user_id
     )
     if location_ids:
-        statement = statement.where(FavoriteLocation.location_id.in_(location_ids))
+        statement = statement.where(FavoriteLocation.location_id.in_(location_ids).options(
+                selectinload(Location.activities),
+                selectinload(Location.styles),
+                selectinload(Location.levels),
+            )
+        )
     result = await session.execute(statement)
     return {row[0] for row in result.all()}
 
@@ -339,8 +364,7 @@ async def list_location_filter_options(
         ],
         "activity_ids": [
             int(value)
-            for value in activity_ids_result.scalars().all()
-            if value is not None
+            for value in activity_ids_result.scalars().all() if value is not None
         ],
         "styles": [
             value for value in styles_result.scalars().all() if value is not None
@@ -386,9 +410,18 @@ async def admin_create_location(
 
     session.add(new_location)
     await session.commit()
-    await session.refresh(new_location)
+    statement = (
+        select(Location)
+        .where(Location.id == new_location.id)
+        .options(
+            selectinload(Location.activities),
+            selectinload(Location.styles),
+            selectinload(Location.levels),
+        )
+    )
+    result = await session.execute(statement)
 
-    return new_location
+    return result.scalar_one()
 
 
 async def admin_delete_location_by_id(session: AsyncSession, location_id: int) -> bool:
