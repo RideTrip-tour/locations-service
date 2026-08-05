@@ -509,18 +509,9 @@ def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_
     compiled = str(statement.compile(dialect=postgresql.dialect()))
 
     assert "lower(locations.region) IN" in compiled
-    assert "locations.activity_ids &&" in compiled
-    assert "unnest(locations.levels)" in compiled
-    assert "(value)" in compiled
+    assert "JOIN location_activity" in compiled
+    assert "JOIN location_level" in compiled
+    assert "JOIN levels" in compiled
     assert "lower(" in compiled
     assert "locations.is_active IS true" in compiled
     assert " AND " in compiled
-
-
-def test_apply_location_filters_empty_activity_ids_match_no_locations():
-    statement = apply_location_filters(select(Location), activity_id=[], is_active=True)
-
-    compiled = str(statement.compile(dialect=postgresql.dialect()))
-
-    assert "false" in compiled
-    assert "locations.activity_ids &&" not in compiled

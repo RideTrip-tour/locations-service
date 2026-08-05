@@ -7,7 +7,15 @@ from sqlalchemy import Select, and_, delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
-from app.db.models import FavoriteLocation, Location
+from app.db.models import (
+    FavoriteLocation,
+    Location,
+    Level,
+    Style,
+    LocationActivity,
+    LocationLevel,
+    LocationStyle
+)
 
 T = TypeVar("T", int, str)
 StrFilter = str | Sequence[str]
@@ -52,33 +60,6 @@ def _apply_text_filter(statement: Select, field, value: StrFilter | None):
     return statement.where(func.lower(field).in_(values))
 
 
-def _apply_array_filter(
-    statement: Select,
-    field,
-    value: IntFilter | StrFilter | None,
-    *,
-    item_type: type[int] | type[str],
-):
-    """Apply PostgreSQL array overlap filter for any selected value."""
-    if item_type is int:
-        values = _normalize_int_values(value)
-        if not values:
-            return statement.where(false())
-        return statement.where(field.overlap(values))
-
-    values = _normalize_text_values(value)
-    if not values:
-        return statement
-
-    array_values = func.unnest(field).table_valued("value").render_derived()
-    return statement.where(
-        select(1)
-        .select_from(array_values)
-        .where(func.lower(array_values.c.value).in_(values))
-        .exists()
-    )
-
-
 def apply_location_filters(
     statement: Select,
     *,
@@ -111,16 +92,37 @@ def apply_location_filters(
     if country:
         statement = _apply_text_filter(statement, Location.country, country)
     if activity_id is not None:
-        statement = _apply_array_filter(
-            statement, Location.activity_ids, activity_id, item_type=int
+        statement = statement.join(
+            LocationActivity,
+            LocationActivity.location_id == Location.id
+        ).where(
+            LocationActivity.activity_id.in_(
+                _normalize_int_values(activity_id)
+            )
         )
     if styles:
-        statement = _apply_array_filter(
-            statement, Location.styles, styles, item_type=str
+        statement = statement.join(
+            LocationStyle,
+            LocationStyle.location_id == Location.id
+        ).join(
+            Style,
+            Style.id == LocationStyle.style_id
+        ).where(
+            func.lower(Style.name).in_(
+                _normalize_text_values(styles)
+            )
         )
     if levels:
-        statement = _apply_array_filter(
-            statement, Location.levels, levels, item_type=str
+        statement = statement.join(
+            LocationLevel,
+            LocationLevel.location_id == Location.id
+        ).join(
+            Level,
+            Level.id == LocationLevel.level_id
+        ).where(
+            func.lower(Level.name).in_(
+                _normalize_text_values(levels)
+            )
         )
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
@@ -172,6 +174,7 @@ async def list_locations(
         levels=levels,
         is_active=is_active,
     )
+    base_statement = base_statement.distinct()
 
     total_statement = select(func.count()).select_from(base_statement.subquery())
     total = await session.scalar(total_statement)
@@ -213,6 +216,7 @@ async def list_favorite_locations(
         levels=levels,
         is_active=is_active,
     )
+    base_statement = base_statement.distinct()
 
     total_statement = select(func.count()).select_from(base_statement.subquery())
     total = await session.scalar(total_statement)
@@ -285,13 +289,27 @@ async def list_location_filter_options(
         select(Location.country).where(filters).distinct().order_by(Location.country)
     )
     activity_ids_result = await session.execute(
-        select(func.unnest(Location.activity_ids)).where(filters).distinct()
+        select(LocationActivity.activity_id).join(
+            Location, Location.id == LocationActivity.location_id
+        ).where(filters).distinct()
     )
     styles_result = await session.execute(
-        select(func.unnest(Location.styles)).where(filters).distinct()
+        select(
+            Style.name
+        ).join(
+            LocationStyle, LocationStyle.style_id == Style.id
+        ).join(
+            Location, Location.id == LocationStyle.location_id
+        ).where(filters).distinct()
     )
     levels_result = await session.execute(
-        select(func.unnest(Location.levels)).where(filters).distinct()
+        select(
+            Level.name
+        ).join(
+            LocationLevel, LocationLevel.level_id == Level.id
+        ).join(
+            Location, Location.id == LocationLevel.location_id
+        ).where(filters).distinct()
     )
 
     return {
@@ -320,14 +338,48 @@ async def list_location_filter_options(
 
 async def admin_create_location(
     session: AsyncSession, locations_in: AdminLocationCreate
-) -> AdminLocationRead:
-    location_data = locations_in.model_dump(exclude_unset=True)
+) -> Location:
+    location_data = locations_in.model_dump(exclude={
+        "activity_ids",
+        "styles",
+        "levels",
+    })
     new_location = Location(**location_data)
-
     session.add(new_location)
+    await session.flush()
+
+    for activity in locations_in.activity_ids:
+        session.add(
+            LocationActivity(
+                location_id=new_location.id,
+                activity_id=activity
+            )
+        )
+
+    styles = await session.scalars(
+        select(Style).where(Style.name.in_(locations_in.styles))
+        )
+    for style in styles:
+        session.add(
+            LocationStyle(
+                location_id=new_location.id,
+                style_id=style.id,
+            )
+        )
+
+    levels = await session.scalars(
+        select(Level).where(Level.name.in_(locations_in.levels))
+    )
+    for level in levels:
+        session.add(
+            LocationLevel(
+                location_id=new_location.id,
+                level_id=level.id
+            )
+        )
+
     await session.commit()
     await session.refresh(new_location)
-
     return new_location
 
 

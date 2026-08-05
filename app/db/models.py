@@ -9,6 +9,30 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+
+
+class Level(Base):
+    __tablename__ = "levels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+
+
+class Style(Base):
+    __tablename__ = "styles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+
+
 class Location(Base):
     __tablename__ = "locations"
 
@@ -26,24 +50,6 @@ class Location(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     distance_to_city_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    activity_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::integer[]"),
-    )
-    styles: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
-    )
-    levels: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
-    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -63,10 +69,49 @@ class Location(Base):
         Index("ix_locations_region_lower", func.lower(region)),
         Index("ix_locations_city_lower", func.lower(city)),
         Index("ix_locations_country_lower", func.lower(country)),
-        Index("ix_locations_activity_ids_gin", activity_ids, postgresql_using="gin"),
-        Index("ix_locations_styles_gin", styles, postgresql_using="gin"),
-        Index("ix_locations_levels_gin", levels, postgresql_using="gin"),
     )
+
+
+class LocationActivity(Base):
+    __tablename__ = "location_activity"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    location_id: Mapped[int] = mapped_column(
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+        )
+    activity_id: Mapped[int] = mapped_column(
+        ForeignKey('activities.id', ondelete='CASCADE'),
+        primary_key=True
+        )
+
+
+class LocationStyle(Base):
+    __tablename__ = "location_style"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    location_id: Mapped[int] = mapped_column(
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+        )
+    style_id: Mapped[int] = mapped_column(
+        ForeignKey("styles.id", ondelete="CASCADE"),
+        primary_key=True
+        )
+
+
+class LocationLevel(Base):
+    __tablename__ = "location_level"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    location_id: Mapped[int] = mapped_column(
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        primary_key=True
+        )
+    level_id: Mapped[int] = mapped_column(
+        ForeignKey("levels.id", ondelete="CASCADE"),
+        primary_key=True
+        )
 
 
 class FavoriteLocation(Base):
