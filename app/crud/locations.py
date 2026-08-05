@@ -1,13 +1,14 @@
 from __future__ import annotations
-
+from fastapi import HTTPException
 from collections.abc import Sequence
 from typing import TypeVar
 
-from sqlalchemy import Select, and_, delete, false, func, or_, select
+from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.admin import AdminLocationCreate, AdminLocationRead
+from app.schemas.admin import AdminLocationCreate
 from app.db.models import (
+    Activity,
     FavoriteLocation,
     Location,
     Level,
@@ -60,6 +61,22 @@ def _apply_text_filter(statement: Select, field, value: StrFilter | None):
     return statement.where(func.lower(field).in_(values))
 
 
+def _apply_relation_filter(
+    statement: Select,
+    between_model,
+    foreign_key,
+    related_model,
+    values
+):
+    statement = statement.join(
+        between_model, between_model.location_id == Location.id,
+        ).join(
+            related_model, related_model.id == foreign_key
+            ).where(
+                func.lower(related_model.name).in_(values))
+    return statement
+
+
 def apply_location_filters(
     statement: Select,
     *,
@@ -101,29 +118,9 @@ def apply_location_filters(
             )
         )
     if styles:
-        statement = statement.join(
-            LocationStyle,
-            LocationStyle.location_id == Location.id
-        ).join(
-            Style,
-            Style.id == LocationStyle.style_id
-        ).where(
-            func.lower(Style.name).in_(
-                _normalize_text_values(styles)
-            )
-        )
+        statement = _apply_relation_filter(statement, LocationStyle, LocationStyle.style_id, Style, _normalize_text_values(styles))
     if levels:
-        statement = statement.join(
-            LocationLevel,
-            LocationLevel.location_id == Location.id
-        ).join(
-            Level,
-            Level.id == LocationLevel.level_id
-        ).where(
-            func.lower(Level.name).in_(
-                _normalize_text_values(levels)
-            )
-        )
+        statement = _apply_relation_filter(statement, LocationLevel, LocationLevel.level_id, Level, _normalize_text_values(levels))
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
 
@@ -348,35 +345,37 @@ async def admin_create_location(
     session.add(new_location)
     await session.flush()
 
-    for activity in locations_in.activity_ids:
-        session.add(
-            LocationActivity(
-                location_id=new_location.id,
-                activity_id=activity
-            )
-        )
-
-    styles = await session.scalars(
-        select(Style).where(Style.name.in_(locations_in.styles))
-        )
-    for style in styles:
-        session.add(
-            LocationStyle(
-                location_id=new_location.id,
-                style_id=style.id,
-            )
-        )
-
-    levels = await session.scalars(
-        select(Level).where(Level.name.in_(locations_in.levels))
+    found_activities = set(await session.scalars(select(Activity.id).where(Activity.id.in_(locations_in.activity_ids))))
+    not_found_activities = set(locations_in.activity_ids) - found_activities
+    if not_found_activities:
+        raise HTTPException(status_code=400, detail=f"Activities not found: {sorted(not_found_activities)}")
+    session.add_all(
+        [LocationActivity(
+            location_id=new_location.id,
+            activity_id=activity) for activity in found_activities]
     )
-    for level in levels:
-        session.add(
-            LocationLevel(
-                location_id=new_location.id,
-                level_id=level.id
-            )
-        )
+
+    found_styles = list(await session.scalars(select(Style).where(Style.name.in_(locations_in.styles))))
+    found_styles_names = set(style.name for style in found_styles)
+    not_found_styles_names = set(locations_in.styles) - found_styles_names
+    if not_found_styles_names:
+        raise HTTPException(status_code=400, detail=f"Styles not found: {sorted(not_found_styles_names)}")     
+    session.add_all(
+        [LocationStyle(
+            location_id=new_location.id,
+            style_id=style.id) for style in found_styles]
+    )
+
+    found_levels = list(await session.scalars(select(Level).where(Level.name.in_(locations_in.levels))))
+    found_level_names = set(level.name for level in found_levels)
+    not_found_level_names = set(locations_in.levels) - found_level_names
+    if not_found_level_names:
+        raise HTTPException(status_code=400, detail=f"Styles not found: {sorted(not_found_level_names)}")     
+    session.add_all(
+        [LocationLevel(
+            location_id=new_location.id,
+            level_id=level.id) for level in found_levels]
+    )
 
     await session.commit()
     await session.refresh(new_location)

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -75,7 +74,6 @@ class Location(Base):
 class LocationActivity(Base):
     __tablename__ = "location_activity"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     location_id: Mapped[int] = mapped_column(
         ForeignKey("locations.id", ondelete="CASCADE"),
         primary_key=True
@@ -89,7 +87,6 @@ class LocationActivity(Base):
 class LocationStyle(Base):
     __tablename__ = "location_style"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     location_id: Mapped[int] = mapped_column(
         ForeignKey("locations.id", ondelete="CASCADE"),
         primary_key=True
@@ -103,7 +100,6 @@ class LocationStyle(Base):
 class LocationLevel(Base):
     __tablename__ = "location_level"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     location_id: Mapped[int] = mapped_column(
         ForeignKey("locations.id", ondelete="CASCADE"),
         primary_key=True

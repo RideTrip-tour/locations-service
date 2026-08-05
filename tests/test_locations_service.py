@@ -15,7 +15,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.crud.locations import apply_location_filters  # noqa E402
-from app.db.models import Location  # noqa E402
+from app.db.models import Location, Level, Style, Activity, LocationLevel, LocationStyle, LocationActivity  # noqa E402
+from app.crud.locations import admin_create_location
 from app.routes.locations import (  # noqa E402
     _parse_activity_ids,
     _parse_location_id,
@@ -24,6 +25,7 @@ from app.routes.locations import (  # noqa E402
     read_locations,
     router,
 )
+from app.schemas.admin import AdminLocationCreate
 from app.services.locations import LocationService # noqa E402
 
 
@@ -37,6 +39,33 @@ class FakeSession:
 
     async def rollback(self):
         self.rollbacks += 1
+
+
+class FakeAdminSession:
+    def __init__(self):
+        self.added = []
+        self.committed = False
+
+    def add(self, obj):
+        if isinstance(obj, Location):
+            obj.id = 1
+
+        self.added.append(obj)
+
+    def add_all(self, objects):
+        self.added.extend(objects)
+
+    async def flush(self):
+        pass
+
+    async def scalars(self, query):
+        return []
+
+    async def commit(self):
+        self.committed = True
+
+    async def refresh(self, obj):
+        pass
 
 
 def make_location(**overrides):
@@ -515,3 +544,76 @@ def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_
     assert "lower(" in compiled
     assert "locations.is_active IS true" in compiled
     assert " AND " in compiled
+
+
+def test_admin_create_location_creates_relations():
+    session = FakeAdminSession()
+
+    location_in = AdminLocationCreate(
+        name="Test location",
+        region="Краснодарский край",
+        city="Сочи",
+        country="Russia",
+        description="Test",
+        latitude=43.0,
+        longitude=40.0,
+        distance_to_city_km=10,
+        activity_ids=[1, 2],
+        styles=["mountain"],
+        levels=["Любитель"],
+    )
+
+    async def fake_scalars(query):
+        query_text = str(query)
+
+        if "activities" in query_text:
+            return [1, 2]
+
+        if "styles" in query_text:
+            return [
+                Style(id=10, name="mountain")
+            ]
+
+        if "levels" in query_text:
+            return [
+                Level(id=20, name="Любитель")
+            ]
+
+        return []
+
+    session.scalars = fake_scalars
+
+    location = asyncio.run(
+        admin_create_location(
+            session,
+            location_in,
+        )
+    )
+
+    assert location.id == 1
+
+    assert any(
+        isinstance(obj, LocationActivity)
+        and obj.activity_id == 1
+        for obj in session.added
+    )
+
+    assert any(
+        isinstance(obj, LocationActivity)
+        and obj.activity_id == 2
+        for obj in session.added
+    )
+
+    assert any(
+        isinstance(obj, LocationStyle)
+        and obj.style_id == 10
+        for obj in session.added
+    )
+
+    assert any(
+        isinstance(obj, LocationLevel)
+        and obj.level_id == 20
+        for obj in session.added
+    )
+
+    assert session.committed is True
