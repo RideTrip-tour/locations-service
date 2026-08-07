@@ -2,11 +2,81 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+style_location_association = Table(
+    "style_location_association",
+    Base.metadata,
+    Column("style", String(255), ForeignKey("styles.name", ondelete="CASCADE"), primary_key=True),
+    Column("location_id", Integer, ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True),
+
+    Index("ix_style_location_style", "style"),
+    Index("ix_style_location_location_id", "location_id"),
+)
+
+
+class Style(Base):
+    __tablename__ = "styles"
+
+    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+    locations: Mapped[list["Location"]] = relationship(
+        "Location",
+        secondary=style_location_association,
+        back_populates="styles",
+        lazy="selectin"
+    )
+
+
+level_location_association = Table(
+    "level_location_association",
+    Base.metadata,
+    Column("level_id", Integer, ForeignKey("levels.name", ondelete="CASCADE"), primary_key=True),
+    Column("location_id", Integer, ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True),
+
+    Index("ix_level_location_level_id", "level_id"),
+    Index("ix_level_location_location_id", "location_id"),
+)
+
+
+class Level(Base):
+    __tablename__ = "levels"
+
+    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+    locations: Mapped[list["Location"]] = relationship(
+        "Location",
+        secondary=level_location_association,
+        back_populates="levels",
+        lazy="selectin"
+    )
+
+
+activity_location_association = Table(
+    "activity_location_association",
+    Base.metadata,
+    Column("activity_id", Integer, ForeignKey("activities.id", ondelete="CASCADE"), primary_key=True),
+    Column("location_id", Integer, ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True),
+
+    Index("ix_activity_location_activity_id", "activity_id"),
+    Index("ix_activity_location_location_id", "location_id"),
+)
+
+
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    locations: Mapped[list["Location"]] = relationship(
+        "Location",
+        secondary=activity_location_association,
+        back_populates="activity_ids",
+        lazy="selectin"
+    )
 
 
 class Location(Base):
@@ -26,23 +96,23 @@ class Location(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     distance_to_city_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    activity_ids: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::integer[]"),
+    activity_ids: Mapped[list["Activity"]] = relationship(
+            "Activity",
+            secondary=activity_location_association,
+            back_populates="locations",
+            lazy="selectin"
+        )
+    styles: Mapped[list["Style"]] = relationship(
+        "Style",
+        secondary=style_location_association,
+        back_populates="locations",
+        lazy="selectin"
     )
-    styles: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
-    )
-    levels: Mapped[list[str]] = mapped_column(
-        ARRAY(String),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'::varchar[]"),
+    levels: Mapped[list["Level"]] = relationship(
+        "Level",
+        secondary=level_location_association,
+        back_populates="locations",
+        lazy="selectin"
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -63,9 +133,6 @@ class Location(Base):
         Index("ix_locations_region_lower", func.lower(region)),
         Index("ix_locations_city_lower", func.lower(city)),
         Index("ix_locations_country_lower", func.lower(country)),
-        Index("ix_locations_activity_ids_gin", activity_ids, postgresql_using="gin"),
-        Index("ix_locations_styles_gin", styles, postgresql_using="gin"),
-        Index("ix_locations_levels_gin", levels, postgresql_using="gin"),
     )
 
 

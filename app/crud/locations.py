@@ -7,7 +7,7 @@ from sqlalchemy import Select, and_, delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
-from app.db.models import FavoriteLocation, Location
+from app.db.models import Activity, FavoriteLocation, Level, Location, Style
 
 T = TypeVar("T", int, str)
 StrFilter = str | Sequence[str]
@@ -52,30 +52,28 @@ def _apply_text_filter(statement: Select, field, value: StrFilter | None):
     return statement.where(func.lower(field).in_(values))
 
 
-def _apply_array_filter(
+def _apply_related_model_filter(
     statement: Select,
-    field,
+    related_model,
+    related_model_field,
     value: IntFilter | StrFilter | None,
     *,
     item_type: type[int] | type[str],
 ):
-    """Apply PostgreSQL array overlap filter for any selected value."""
+    """Apply a filter for a related model using an IN clause."""
+
+    statement = statement.join(related_model)
+
     if item_type is int:
         values = _normalize_int_values(value)
         if not values:
             return statement.where(false())
-        return statement.where(field.overlap(values))
-
-    values = _normalize_text_values(value)
-    if not values:
-        return statement
-
-    array_values = func.unnest(field).table_valued("value").render_derived()
+    else:
+        values = _normalize_text_values(value)
+        if not values:
+            return statement
     return statement.where(
-        select(1)
-        .select_from(array_values)
-        .where(func.lower(array_values.c.value).in_(values))
-        .exists()
+        related_model_field.in_(values)
     )
 
 
@@ -111,16 +109,16 @@ def apply_location_filters(
     if country:
         statement = _apply_text_filter(statement, Location.country, country)
     if activity_id is not None:
-        statement = _apply_array_filter(
-            statement, Location.activity_ids, activity_id, item_type=int
+        statement = _apply_related_model_filter(
+            statement, Location.activity_ids, Activity.id, activity_id, item_type=int
         )
     if styles:
-        statement = _apply_array_filter(
-            statement, Location.styles, styles, item_type=str
+        statement = _apply_related_model_filter(
+            statement, Location.styles, Style.name, styles, item_type=str
         )
     if levels:
-        statement = _apply_array_filter(
-            statement, Location.levels, levels, item_type=str
+        statement = _apply_related_model_filter(
+            statement, Location.levels, Level.name, levels, item_type=str
         )
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
