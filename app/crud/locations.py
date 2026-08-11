@@ -286,27 +286,13 @@ async def list_location_filter_options(
         select(Location.country).where(filters).distinct().order_by(Location.country)
     )
     activity_ids_result = await session.execute(
-        select(LocationActivity.activity_id).join(
-            Location, Location.id == LocationActivity.location_id
-        ).where(filters).distinct()
+        select(Activity.name)
     )
     styles_result = await session.execute(
-        select(
-            Style.name
-        ).join(
-            LocationStyle, LocationStyle.style_id == Style.id
-        ).join(
-            Location, Location.id == LocationStyle.location_id
-        ).where(filters).distinct()
+        select(Style.name)
     )
     levels_result = await session.execute(
-        select(
-            Level.name
-        ).join(
-            LocationLevel, LocationLevel.level_id == Level.id
-        ).join(
-            Location, Location.id == LocationLevel.location_id
-        ).where(filters).distinct()
+        select(Level.name)
     )
 
     return {
@@ -345,37 +331,35 @@ async def admin_create_location(
     session.add(new_location)
     await session.flush()
 
-    found_activities = set(await session.scalars(select(Activity.id).where(Activity.id.in_(locations_in.activity_ids))))
-    not_found_activities = set(locations_in.activity_ids) - found_activities
-    if not_found_activities:
-        raise HTTPException(status_code=400, detail=f"Activities not found: {sorted(not_found_activities)}")
-    session.add_all(
-        [LocationActivity(
-            location_id=new_location.id,
-            activity_id=activity) for activity in found_activities]
-    )
+    async def check_styles_activities(model, key, relation_model, relation_key):
+        if model == Activity:
+            found_objects = set(await session.scalars(select(model.id).where(model.id.in_(getattr(locations_in, key)))))
+            not_found_objects = set((getattr(locations_in, key))) - found_objects
+            if not_found_objects:
+                raise HTTPException(status_code=400, detail=f"Objects not found: {sorted(not_found_objects)}")
+            session.add_all([
+                relation_model(
+                    location_id=new_location.id,
+                    **{relation_key: object_id}
+                )
+                for object_id in found_objects
+            ])
+        else:
+            found_objects = list(await session.scalars(select(model).where(model.name.in_(getattr(locations_in, key)))))
+            found_objects_name = {object.name for object in found_objects}
+            not_found_objects_name = set(getattr(locations_in, key)) - found_objects_name
+            if not_found_objects_name:
+                raise HTTPException(status_code=400, detail=f"Objects not found: {sorted(not_found_objects_name)}")
+            session.add_all(
+                [relation_model(
+                    location_id=new_location.id,
+                    **{relation_key: object.id}
+                ) for object in found_objects]
+            )
 
-    found_styles = list(await session.scalars(select(Style).where(Style.name.in_(locations_in.styles))))
-    found_styles_names = set(style.name for style in found_styles)
-    not_found_styles_names = set(locations_in.styles) - found_styles_names
-    if not_found_styles_names:
-        raise HTTPException(status_code=400, detail=f"Styles not found: {sorted(not_found_styles_names)}")     
-    session.add_all(
-        [LocationStyle(
-            location_id=new_location.id,
-            style_id=style.id) for style in found_styles]
-    )
-
-    found_levels = list(await session.scalars(select(Level).where(Level.name.in_(locations_in.levels))))
-    found_level_names = set(level.name for level in found_levels)
-    not_found_level_names = set(locations_in.levels) - found_level_names
-    if not_found_level_names:
-        raise HTTPException(status_code=400, detail=f"Styles not found: {sorted(not_found_level_names)}")     
-    session.add_all(
-        [LocationLevel(
-            location_id=new_location.id,
-            level_id=level.id) for level in found_levels]
-    )
+    await check_styles_activities(Activity, "activity_ids", LocationActivity, "activity_id")
+    await check_styles_activities(Style, "styles", LocationStyle, "style_id")
+    await check_styles_activities(Level, "levels", LocationLevel, "level_id")
 
     await session.commit()
     await session.refresh(new_location)
