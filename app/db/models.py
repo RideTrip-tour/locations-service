@@ -19,6 +19,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+_DELETE_ORPHAN_CASCADE = "all, delete-orphan"
+_LOCATION_ID_FOREIGN_KEY = "locations.id"
+
 
 class Location(Base):
     __tablename__ = "locations"
@@ -52,25 +55,25 @@ class Location(Base):
     )
 
     favorites: Mapped[list[FavoriteLocation]] = relationship(
-        back_populates="location", cascade="all, delete-orphan"
+        back_populates="location", cascade=_DELETE_ORPHAN_CASCADE
     )
     activity_links: Mapped[list[LocationActivity]] = relationship(
         back_populates="location",
-        cascade="all, delete-orphan",
+        cascade=_DELETE_ORPHAN_CASCADE,
         lazy="selectin",
         order_by="LocationActivity.position",
         passive_deletes=True,
     )
     style_links: Mapped[list[LocationStyle]] = relationship(
         back_populates="location",
-        cascade="all, delete-orphan",
+        cascade=_DELETE_ORPHAN_CASCADE,
         lazy="selectin",
         order_by="LocationStyle.position",
         passive_deletes=True,
     )
     level_links: Mapped[list[LocationLevel]] = relationship(
         back_populates="location",
-        cascade="all, delete-orphan",
+        cascade=_DELETE_ORPHAN_CASCADE,
         lazy="selectin",
         order_by="LocationLevel.position",
         passive_deletes=True,
@@ -130,7 +133,7 @@ class LocationActivity(Base):
     __tablename__ = "location_activities"
 
     location_id: Mapped[int] = mapped_column(
-        ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey(_LOCATION_ID_FOREIGN_KEY, ondelete="CASCADE"), primary_key=True
     )
     activity_id: Mapped[int] = mapped_column(
         ForeignKey("activities.id", ondelete="CASCADE"), primary_key=True
@@ -152,7 +155,7 @@ class LocationStyle(Base):
     __tablename__ = "location_styles"
 
     location_id: Mapped[int] = mapped_column(
-        ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey(_LOCATION_ID_FOREIGN_KEY, ondelete="CASCADE"), primary_key=True
     )
     style_name: Mapped[str] = mapped_column(
         ForeignKey("styles.name", ondelete="CASCADE"), primary_key=True
@@ -172,7 +175,7 @@ class LocationLevel(Base):
     __tablename__ = "location_levels"
 
     location_id: Mapped[int] = mapped_column(
-        ForeignKey("locations.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey(_LOCATION_ID_FOREIGN_KEY, ondelete="CASCADE"), primary_key=True
     )
     level_name: Mapped[str] = mapped_column(
         ForeignKey("levels.name", ondelete="CASCADE"), primary_key=True
@@ -194,7 +197,7 @@ class FavoriteLocation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     location_id: Mapped[int] = mapped_column(
-        ForeignKey("locations.id", ondelete="CASCADE"),
+        ForeignKey(_LOCATION_ID_FOREIGN_KEY, ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
