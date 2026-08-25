@@ -3,9 +3,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sqlalchemy import Select, and_, delete, false, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import FavoriteLocation, Location
+from app.db.models import (
+    Activity,
+    FavoriteLocation,
+    Level,
+    Location,
+    LocationActivity,
+    LocationLevel,
+    LocationStyle,
+    Style,
+)
 from app.schemas.admin import AdminLocationCreate, AdminLocationRead
 
 StrFilter = str | Sequence[str]
@@ -50,33 +60,6 @@ def _apply_text_filter(statement: Select, field, value: StrFilter | None):
     return statement.where(func.lower(field).in_(values))
 
 
-def _apply_array_filter(
-    statement: Select,
-    field,
-    value: IntFilter | StrFilter | None,
-    *,
-    item_type: type[int | str],
-):
-    """Apply PostgreSQL array overlap filter for any selected value."""
-    if item_type is int:
-        values = _normalize_int_values(value)
-        if not values:
-            return statement.where(false())
-        return statement.where(field.overlap(values))
-
-    values = _normalize_text_values(value)
-    if not values:
-        return statement
-
-    array_values = func.unnest(field).table_valued("value").render_derived()
-    return statement.where(
-        select(1)
-        .select_from(array_values)
-        .where(func.lower(array_values.c.value).in_(values))
-        .exists()
-    )
-
-
 def apply_location_filters(
     statement: Select,
     *,
@@ -109,17 +92,31 @@ def apply_location_filters(
     if country:
         statement = _apply_text_filter(statement, Location.country, country)
     if activity_id is not None:
-        statement = _apply_array_filter(
-            statement, Location.activity_ids, activity_id, item_type=int
-        )
+        activity_ids = _normalize_int_values(activity_id)
+        if activity_ids:
+            statement = statement.where(
+                Location.activity_links.any(
+                    LocationActivity.activity_id.in_(activity_ids)
+                )
+            )
+        else:
+            statement = statement.where(false())
     if styles:
-        statement = _apply_array_filter(
-            statement, Location.styles, styles, item_type=str
-        )
+        normalized_styles = _normalize_text_values(styles)
+        if normalized_styles:
+            statement = statement.where(
+                Location.style_links.any(
+                    func.lower(LocationStyle.style_name).in_(normalized_styles)
+                )
+            )
     if levels:
-        statement = _apply_array_filter(
-            statement, Location.levels, levels, item_type=str
-        )
+        normalized_levels = _normalize_text_values(levels)
+        if normalized_levels:
+            statement = statement.where(
+                Location.level_links.any(
+                    func.lower(LocationLevel.level_name).in_(normalized_levels)
+                )
+            )
     if is_active is not None:
         statement = statement.where(Location.is_active.is_(is_active))
 
@@ -283,13 +280,25 @@ async def list_location_filter_options(
         select(Location.country).where(filters).distinct().order_by(Location.country)
     )
     activity_ids_result = await session.execute(
-        select(func.unnest(Location.activity_ids)).where(filters).distinct()
+        select(LocationActivity.activity_id)
+        .join(Location, Location.id == LocationActivity.location_id)
+        .where(filters)
+        .distinct()
+        .order_by(LocationActivity.activity_id)
     )
     styles_result = await session.execute(
-        select(func.unnest(Location.styles)).where(filters).distinct()
+        select(LocationStyle.style_name)
+        .join(Location, Location.id == LocationStyle.location_id)
+        .where(filters)
+        .distinct()
+        .order_by(LocationStyle.style_name)
     )
     levels_result = await session.execute(
-        select(func.unnest(Location.levels)).where(filters).distinct()
+        select(LocationLevel.level_name)
+        .join(Location, Location.id == LocationLevel.location_id)
+        .where(filters)
+        .distinct()
+        .order_by(LocationLevel.level_name)
     )
 
     return {
@@ -320,7 +329,36 @@ async def admin_create_location(
     session: AsyncSession, locations_in: AdminLocationCreate
 ) -> AdminLocationRead:
     location_data = locations_in.model_dump(exclude_unset=True)
+    activity_ids = list(dict.fromkeys(location_data.pop("activity_ids", [])))
+    styles = list(dict.fromkeys(location_data.pop("styles", [])))
+    levels = list(dict.fromkeys(location_data.pop("levels", [])))
+
+    related_values = (
+        (Activity, "id", activity_ids),
+        (Style, "name", styles),
+        (Level, "name", levels),
+    )
+    for model, field_name, values in related_values:
+        if values:
+            await session.execute(
+                insert(model)
+                .values([{field_name: value} for value in values])
+                .on_conflict_do_nothing()
+            )
+
     new_location = Location(**location_data)
+    new_location.activity_links = [
+        LocationActivity(activity_id=value, position=position)
+        for position, value in enumerate(activity_ids)
+    ]
+    new_location.style_links = [
+        LocationStyle(style_name=value, position=position)
+        for position, value in enumerate(styles)
+    ]
+    new_location.level_links = [
+        LocationLevel(level_name=value, position=position)
+        for position, value in enumerate(levels)
+    ]
 
     session.add(new_location)
     await session.commit()
