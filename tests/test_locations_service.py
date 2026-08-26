@@ -13,8 +13,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.crud.locations import apply_location_filters  # noqa E402
-from app.db.models import Location
+from app.crud.locations import (  # noqa E402
+    admin_create_location,
+    apply_location_filters,
+    list_location_filter_options,
+)
+from app.db.models import (
+    Location,
+    LocationActivity,
+    LocationLevel,
+    LocationStyle,
+)
 from app.routes.query_params import (
     _parse_activity_ids,
     _parse_location_id,
@@ -25,6 +34,7 @@ from app.routes.locations import (
     read_locations,
     router,
 )
+from app.schemas.admin import AdminLocationCreate
 from app.services.locations import LocationService
 
 
@@ -519,11 +529,33 @@ def test_locations_openapi_keeps_activity_id_as_integer_array():
     assert activity_id_schema["anyOf"][0]["items"]["type"] == "integer"
 
 
-def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_for_ids():
+def test_location_exposes_ordered_m2m_values_and_empty_defaults():
+    location = Location(
+        activity_links=[
+            LocationActivity(activity_id=12, position=0),
+            LocationActivity(activity_id=15, position=1),
+        ],
+        style_links=[
+            LocationStyle(style_name="ski", position=0),
+            LocationStyle(style_name="freeride", position=1),
+        ],
+        level_links=[LocationLevel(level_name="Любитель", position=0)],
+    )
+
+    assert location.activity_ids == [12, 15]
+    assert location.styles == ["ski", "freeride"]
+    assert location.levels == ["Любитель"]
+    assert Location().activity_ids == []
+    assert Location().styles == []
+    assert Location().levels == []
+
+
+def test_apply_location_filters_uses_case_insensitive_m2m_exists_filters():
     statement = apply_location_filters(
         select(Location),
         region=["Краснодарский край", "Карачаево-Черкесия"],
         activity_id=[1, 2],
+        styles=["Ski"],
         levels=["Любитель"],
         is_active=True,
     )
@@ -531,12 +563,14 @@ def test_apply_location_filters_uses_case_insensitive_filters_and_array_overlap_
     compiled = str(statement.compile(dialect=postgresql.dialect()))
 
     assert "lower(locations.region) IN" in compiled
-    assert "locations.activity_ids &&" in compiled
-    assert "unnest(locations.levels)" in compiled
-    assert "(value)" in compiled
-    assert "lower(" in compiled
+    assert "EXISTS (SELECT 1" in compiled
+    assert "location_activities.activity_id IN" in compiled
+    assert "lower(location_styles.style_name) IN" in compiled
+    assert "lower(location_levels.level_name) IN" in compiled
     assert "locations.is_active IS true" in compiled
     assert " AND " in compiled
+    assert "unnest" not in compiled
+    assert " JOIN location_" not in compiled.split("WHERE", maxsplit=1)[0]
 
 
 def test_apply_location_filters_empty_activity_ids_match_no_locations():
@@ -545,4 +579,111 @@ def test_apply_location_filters_empty_activity_ids_match_no_locations():
     compiled = str(statement.compile(dialect=postgresql.dialect()))
 
     assert "false" in compiled
-    assert "locations.activity_ids &&" not in compiled
+    assert "location_activities" not in compiled
+
+
+class RecordingSession(FakeSession):
+    def __init__(self, results=None):
+        super().__init__()
+        self.statements = []
+        self.added = None
+        self.results = iter(results or [])
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        return next(self.results, None)
+
+    def add(self, value):
+        self.added = value
+
+    async def refresh(self, value):
+        assert value is self.added
+
+
+class ScalarResult:
+    def __init__(self, values):
+        self.values = values
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self.values
+
+
+def test_admin_create_location_builds_deduplicated_ordered_m2m_links():
+    session = RecordingSession()
+    location_in = AdminLocationCreate(
+        name="Роза Хутор",
+        slug="rosa-khutor",
+        region="Краснодарский край",
+        activity_ids=[12, 15, 12],
+        styles=["ski", "freeride", "ski"],
+        levels=["Любитель", "Эксперт"],
+    )
+
+    result = asyncio.run(admin_create_location(session, location_in))
+
+    assert result is session.added
+    assert result.activity_ids == [12, 15]
+    assert result.styles == ["ski", "freeride"]
+    assert result.levels == ["Любитель", "Эксперт"]
+    assert [link.position for link in result.activity_links] == [0, 1]
+    assert session.commits == 1
+    assert len(session.statements) == 3
+    inserts = "\n".join(
+        str(statement.compile(dialect=postgresql.dialect()))
+        for statement in session.statements
+    )
+    assert "INSERT INTO activities" in inserts
+    assert "INSERT INTO styles" in inserts
+    assert "INSERT INTO levels" in inserts
+    assert "ON CONFLICT DO NOTHING" in inserts
+
+
+def test_admin_create_location_supports_no_related_values():
+    session = RecordingSession()
+    location_in = AdminLocationCreate(
+        name="Роза Хутор",
+        slug="rosa-khutor",
+        region="Краснодарский край",
+    )
+
+    result = asyncio.run(admin_create_location(session, location_in))
+
+    assert result.activity_ids == []
+    assert result.styles == []
+    assert result.levels == []
+    assert session.statements == []
+
+
+def test_filter_options_are_read_from_m2m_links_without_unnest():
+    session = RecordingSession(
+        [
+            ScalarResult(["Краснодарский край"]),
+            ScalarResult(["Сочи"]),
+            ScalarResult(["Russia"]),
+            ScalarResult([12, 15]),
+            ScalarResult(["freeride", "ski"]),
+            ScalarResult(["Любитель"]),
+        ]
+    )
+
+    result = asyncio.run(list_location_filter_options(session))
+
+    assert result == {
+        "regions": ["Краснодарский край"],
+        "cities": ["Сочи"],
+        "countries": ["Russia"],
+        "activity_ids": [12, 15],
+        "styles": ["freeride", "ski"],
+        "levels": ["Любитель"],
+    }
+    related_queries = "\n".join(
+        str(statement.compile(dialect=postgresql.dialect()))
+        for statement in session.statements[3:]
+    )
+    assert "location_activities" in related_queries
+    assert "location_styles" in related_queries
+    assert "location_levels" in related_queries
+    assert "unnest" not in related_queries
