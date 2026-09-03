@@ -3,12 +3,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Select, and_, delete, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
-    FavoriteLocation,
     Level,
     Location,
     LocationActivity,
@@ -247,97 +246,6 @@ async def list_locations(
     statement = base_statement.order_by(Location.name).limit(limit).offset(offset)
     result = await session.execute(statement)
     return result.scalars().all(), int(total or 0)
-
-
-async def list_favorite_locations(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    search: str | None = None,
-    region: StrFilter | None = None,
-    city: StrFilter | None = None,
-    country: StrFilter | None = None,
-    activity_id: IntFilter | None = None,
-    styles: StrFilter | None = None,
-    levels: StrFilter | None = None,
-    is_active: bool | None = True,
-    limit: int = 20,
-    offset: int = 0,
-) -> tuple[Sequence[Location], int]:
-    """Return a paginated filtered list of a user's favorite locations and total count."""
-    base_statement = (
-        select(Location)
-        .options(
-            selectinload(Location.activities_rel),
-            selectinload(Location.styles_rel).selectinload(LocationStyle.style),
-            selectinload(Location.levels_rel).selectinload(LocationLevel.level),
-        )
-        .join(FavoriteLocation, FavoriteLocation.location_id == Location.id)
-        .where(FavoriteLocation.user_id == user_id)
-    )
-    base_statement = apply_location_filters(
-        base_statement,
-        search=search,
-        region=region,
-        city=city,
-        country=country,
-        activity_id=activity_id,
-        styles=styles,
-        levels=levels,
-        is_active=is_active,
-    )
-
-    total_statement = select(func.count()).select_from(base_statement.subquery())
-    total = await session.scalar(total_statement)
-
-    statement = base_statement.order_by(Location.name).limit(limit).offset(offset)
-    result = await session.execute(statement)
-    return result.scalars().all(), int(total or 0)
-
-
-async def list_favorite_location_ids(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    location_ids: list[int] | None = None,
-) -> set[int]:
-    statement = select(FavoriteLocation.location_id).where(
-        FavoriteLocation.user_id == user_id
-    )
-    if location_ids:
-        statement = statement.where(FavoriteLocation.location_id.in_(location_ids))
-    result = await session.execute(statement)
-    return {row[0] for row in result.all()}
-
-
-async def add_favorite_location(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    location_id: int,
-) -> FavoriteLocation:
-    favorite = FavoriteLocation(user_id=user_id, location_id=location_id)
-    session.add(favorite)
-    await session.flush()
-    await session.refresh(favorite)
-    return favorite
-
-
-async def remove_favorite_location(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    location_id: int,
-) -> bool:
-    result = await session.execute(
-        delete(FavoriteLocation).where(
-            and_(
-                FavoriteLocation.user_id == user_id,
-                FavoriteLocation.location_id == location_id,
-            )
-        )
-    )
-    return result.rowcount > 0
 
 
 async def list_location_filter_options(

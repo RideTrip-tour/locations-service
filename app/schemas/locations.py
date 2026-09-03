@@ -31,7 +31,6 @@ class LocationRead(LocationBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    is_favorite: bool = False
 
 
 class LocationCreate(LocationBase):
@@ -49,8 +48,3 @@ class LocationFilterOptions(BaseModel):
     activity_ids: list[int] = Field(default_factory=list)
     styles: list[str] = Field(default_factory=list)
     levels: list[str] = Field(default_factory=list)
-
-
-class FavoriteStateResponse(BaseModel):
-    location_id: int
-    is_favorite: bool

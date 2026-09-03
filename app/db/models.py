@@ -11,7 +11,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     func,
     text,
 )
@@ -114,10 +113,6 @@ class Location(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-
-    favorites: Mapped[list[FavoriteLocation]] = relationship(
-        back_populates="location", cascade="all, delete-orphan"
-    )
     activities_rel: Mapped[list[LocationActivity]] = relationship(
         back_populates="location", cascade="all, delete-orphan"
     )
@@ -145,27 +140,4 @@ class Location(Base):
         Index("ix_locations_region_lower", func.lower(region)),
         Index("ix_locations_city_lower", func.lower(city)),
         Index("ix_locations_country_lower", func.lower(country)),
-    )
-
-
-class FavoriteLocation(Base):
-    __tablename__ = "favorite_locations"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    location_id: Mapped[int] = mapped_column(
-        ForeignKey("locations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    location: Mapped[Location] = relationship(back_populates="favorites")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id", "location_id", name="uq_favorite_locations_user_location"
-        ),
     )

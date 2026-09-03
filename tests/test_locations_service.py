@@ -7,7 +7,6 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.exc import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -25,7 +24,6 @@ from app.routes.query_params import (
     _split_query_values,
 )
 from app.routes.locations import (
-    read_favorite_locations,
     read_locations,
     router,
 )
@@ -76,37 +74,6 @@ def make_location(**overrides):
     return SimpleNamespace(**payload)
 
 
-@pytest.mark.parametrize("user_id,expected_favorite", [(None, False), (7, True)])
-def test_get_location_marks_favorite(monkeypatch, user_id, expected_favorite):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_get_location_by_id(db, location_id, *, only_active=True):
-        assert db is session
-        assert location_id == 1
-        assert only_active is True
-        return make_location()
-
-    async def fake_list_favorite_location_ids(db, *, user_id, location_ids):
-        assert db is session
-        assert user_id == 7
-        assert location_ids == [1]
-        return {1}
-
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_id", fake_get_location_by_id
-    )
-    monkeypatch.setattr(
-        "app.services.locations.list_favorite_location_ids",
-        fake_list_favorite_location_ids,
-    )
-
-    result = asyncio.run(service.get_location(1, user_id=user_id))
-
-    assert result.id == 1
-    assert result.is_favorite is expected_favorite
-
-
 def test_get_location_raises_not_found(monkeypatch):
     session = FakeSession()
     service = LocationService(session)
@@ -143,37 +110,6 @@ def test_get_location_for_admin_includes_inactive_locations(monkeypatch):
 
     assert result.id == 1
     assert result.is_active is False
-
-
-def test_list_locations_enriches_favorites(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-    location = make_location(id=1)
-
-    async def fake_list_locations(db, **kwargs):
-        assert db is session
-        assert kwargs["activity_id"] == 12
-        assert kwargs["is_active"] is True
-        return [location], 1
-
-    async def fake_list_favorite_location_ids(db, *, user_id, location_ids):
-        assert db is session
-        assert user_id == 7
-        assert location_ids == [1]
-        return {1}
-
-    monkeypatch.setattr("app.services.locations.list_locations", fake_list_locations)
-    monkeypatch.setattr(
-        "app.services.locations.list_favorite_location_ids",
-        fake_list_favorite_location_ids,
-    )
-
-    result = asyncio.run(
-        service.list_locations(user_id=7, activity_id=12, limit=20, offset=0)
-    )
-
-    assert result.total == 1
-    assert result.items[0].is_favorite is True
 
 
 def test_list_locations_passes_multi_value_filters(monkeypatch):
@@ -240,7 +176,6 @@ def test_read_locations_preserves_repeated_query_values():
             levels=None,
             limit=20,
             offset=0,
-            user_id=None,
             service=service,
         )
     )
@@ -248,208 +183,6 @@ def test_read_locations_preserves_repeated_query_values():
     assert service.kwargs["region"] == ["Краснодарский край", "Карачаево-Черкесия"]
     assert service.kwargs["activity_id"] == [12, 15]
     assert service.kwargs["styles"] == ["ski", "freeride"]
-
-
-def test_read_favorite_locations_passes_route_filters_to_service():
-    service = SimpleNamespace()
-
-    async def fake_list_favorites(
-        *,
-        user_id,
-        search,
-        region,
-        city,
-        country,
-        activity_id,
-        styles,
-        levels,
-        is_active,
-        limit,
-        offset,
-    ):
-        service.kwargs = {
-            "user_id": user_id,
-            "search": search,
-            "region": region,
-            "city": city,
-            "country": country,
-            "activity_id": activity_id,
-            "styles": styles,
-            "levels": levels,
-            "is_active": is_active,
-            "limit": limit,
-            "offset": offset,
-        }
-        return SimpleNamespace()
-
-    service.list_favorites = fake_list_favorites
-
-    asyncio.run(
-        read_favorite_locations(
-            user_id=7,
-            service=service,
-            search=None,
-            region=None,
-            city=None,
-            country=None,
-            activity_id=None,
-            styles=["ski, freeride"],
-            levels=["Любитель"],
-            limit=20,
-            offset=0,
-        )
-    )
-
-    assert service.kwargs["user_id"] == 7
-    assert service.kwargs["styles"] == ["ski", "freeride"]
-    assert service.kwargs["levels"] == ["Любитель"]
-    assert service.kwargs["is_active"] is True
-
-
-def test_list_locations_without_user_does_not_load_favorites(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-    location = make_location(id=1)
-
-    async def fake_list_locations(db, **kwargs):
-        return [location], 1
-
-    async def fake_list_favorite_location_ids(*args, **kwargs):
-        raise AssertionError("should not load favorites without user_id")
-
-    monkeypatch.setattr("app.services.locations.list_locations", fake_list_locations)
-    monkeypatch.setattr(
-        "app.services.locations.list_favorite_location_ids",
-        fake_list_favorite_location_ids,
-    )
-
-    result = asyncio.run(service.list_locations(user_id=None))
-
-    assert result.items[0].is_favorite is False
-
-
-def test_list_favorites_uses_favorite_query(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-    location = make_location(id=1)
-
-    async def fake_list_favorite_locations(db, **kwargs):
-        assert db is session
-        assert kwargs["user_id"] == 7
-        return [location], 1
-
-    monkeypatch.setattr(
-        "app.services.locations.list_favorite_locations", fake_list_favorite_locations
-    )
-
-    result = asyncio.run(service.list_favorites(user_id=7))
-
-    assert result.total == 1
-    assert result.items[0].is_favorite is True
-
-
-def test_add_favorite_commits(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_get_location_by_id(db, location_id, *, only_active=True):
-        assert only_active is True
-        return make_location(id=location_id)
-
-    async def fake_add_favorite_location(db, *, user_id, location_id):
-        assert db is session
-        assert user_id == 7
-        assert location_id == 1
-        return SimpleNamespace(id=1)
-
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_id", fake_get_location_by_id
-    )
-    monkeypatch.setattr(
-        "app.services.locations.add_favorite_location",
-        fake_add_favorite_location,
-    )
-
-    result = asyncio.run(service.add_favorite(1, 7))
-
-    assert result.location_id == 1
-    assert result.is_favorite is True
-    assert session.commits == 1
-    assert session.rollbacks == 0
-
-
-def test_add_favorite_rejects_inactive_location(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_get_location_by_id(db, location_id, *, only_active=True):
-        assert only_active is True
-        raise HTTPException(status_code=400, detail="Location not found")
-
-    async def fake_add_favorite_location(db, *, user_id, location_id):
-        raise AssertionError("should not add inactive location to favorites")
-
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_id", fake_get_location_by_id
-    )
-    monkeypatch.setattr(
-        "app.services.locations.add_favorite_location",
-        fake_add_favorite_location,
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.add_favorite(1, 7))
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Location not found"
-    assert session.commits == 0
-    assert session.rollbacks == 0
-
-
-def test_add_favorite_rolls_back_on_integrity_error(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_get_location_by_id(db, location_id, *, only_active=True):
-        assert only_active is True
-        return make_location(id=location_id)
-
-    async def fake_add_favorite_location(db, *, user_id, location_id):
-        raise IntegrityError("stmt", {}, Exception("duplicate"))
-
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_id", fake_get_location_by_id
-    )
-    monkeypatch.setattr(
-        "app.services.locations.add_favorite_location",
-        fake_add_favorite_location,
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.add_favorite(1, 7))
-
-    assert exc_info.value.status_code == 409
-    assert session.commits == 0
-    assert session.rollbacks == 1
-
-
-def test_remove_favorite_raises_not_found(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_remove_favorite_location(db, *, user_id, location_id):
-        return False
-
-    monkeypatch.setattr(
-        "app.services.locations.remove_favorite_location",
-        fake_remove_favorite_location,
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.remove_favorite(1, 7))
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "Location favorite not found"
 
 
 def test_list_filter_options(monkeypatch):
