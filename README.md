@@ -1,39 +1,96 @@
-# FastAPI Microservice Template 🚀
+# Location Service
 
-Базовый шаблон для создания микросервисов в экосистеме RideTrip.
-Включает в себя настроенный Docker, асинхронную работу с БД (SQLAlchemy + AsyncPG), миграции (Alembic) и структурированное логирование (Structlog).
+Сервис хранит каталог локаций в отдельной БД и отдаёт API для поиска, фильтрации и избранного.
 
-## 📋 Чек-лист при создании нового сервиса
+## API
 
-Как только вы создали репозиторий из этого шаблона, выполните следующие шаги:
+- `GET /api/locations` - список активных локаций с фильтрами `search`, `region`, `city`, `country`, `activity_id`, `styles`, `levels`, `limit`, `offset`;
+- `GET /api/locations/{location_id}` - карточка активной локации;
+- `GET /api/locations/filters` - доступные значения фильтров;
+- `GET /api/locations/favorites` - активные избранные локации текущего пользователя с теми же фильтрами, что и публичный список;
+- `POST /api/locations/{location_id}/favorite` - добавить в избранное;
+- `DELETE /api/locations/{location_id}/favorite` - удалить из избранного.
 
-1.  **Переименование:**
-    * В `app/core/config.py` измените `APP_NAME` на имя вашего сервиса.
-    * В `pyproject.toml` (или `requirements.txt`) обновите название проекта.
-2.  **Очистка:**
-    * Удалите папку `.git` и инициализируйте новую (если не использовали кнопку "Use this template").
-3.  **Зависимости:**
-    * Добавьте специфичные для сервиса библиотеки (например, `fastapi-users` для Auth или `stripe` для платежей).
+### Admin API
 
----
+Админские ручки доступны внутри Docker Swarm через gateway. Сервис доверяет заголовкам пользователя, которые устанавливает gateway, и не должен публиковаться наружу напрямую.
 
-## 🏗 Структура проекта (Куда писать код?)
+- `GET /api/admin/locations/` - список всех локаций, включая неактивные, с фильтрами `search`, `region`, `city`, `country`, `activity_id`, `styles`, `levels`, `limit`, `offset`;
+- `GET /api/admin/locations/{location_id}` - карточка локации, включая неактивную;
+- `GET /api/admin/locations/filters` - доступные значения фильтров по активным локациям;
+- `POST /api/admin/locations/` - создать локацию;
+- `DELETE /api/admin/locations/{location_id}` - удалить локацию.
+- `POST /api/admin/references/styles` - создать стиль;
+- `POST /api/admin/references/levels` - создать уровень;
+- `PATCH /api/admin/references/styles/{style_id}` - переименовать стиль;
+- `PATCH /api/admin/references/levels/{level_id}` - переименовать уровень;
+- `DELETE /api/admin/references/styles/{style_id}` - удалить стиль;
+- `DELETE /api/admin/references/levels/{level_id}` - удалить уровень.
 
-Мы используем слоистую архитектуру. Код разносится по папкам в зависимости от ответственности:
+### Фильтры локаций
 
-| Папка | Зачем нужна? | Пример |
-| :--- | :--- | :--- |
-| **`app/routes`** | **Точки входа (API).** Только обработка HTTP, валидация входных данных и вызов сервисов. Минимум логики. | `POST /users`, `GET /tours/{id}` |
-| **`app/schemas`** | **Pydantic модели.** Валидация данных "на вход" и "на выход". | `UserCreate`, `TourResponse` |
-| **`app/services`** | **Бизнес-логика.** Основной "мозг" сервиса. Здесь принимаются решения, происходят вычисления. | `calculate_price()`, `register_user()` |
-| **`app/crud`** | **Работа с БД.** Только прямые запросы к базе (Create, Read, Update, Delete). Никакой бизнес-логики. | `get_user_by_email()`, `create_order()` |
-| **`app/db`** | **Модели данных.** SQLAlchemy модели (таблицы БД). | `class User(Base): ...` |
-| **`app/middleware`** | **Middleware.** Перехват запросов (логирование, заголовки, CORS). | `ProcessTimeMiddleware` |
-| **`app/utils`** | **Утилиты.** Вспомогательные функции. | Логгер, форматтеры дат и т.д. |
+`region`, `city`, `country`, `styles`, `levels` и `activity_id` принимают одиночное значение, повторяющиеся query-параметры и CSV.
 
----
+Примеры:
 
-## 🚀 Как запустить
+- `GET /api/locations?region=Краснодарский край`
+- `GET /api/locations?region=Краснодарский край&region=Карачаево-Черкесия`
+- `GET /api/locations?region=Краснодарский край,Карачаево-Черкесия&styles=ski,freeride`
+- `GET /api/locations?activity_id=1&activity_id=2`
+- `GET /api/locations?activity_id=1,2`
 
-### Через Docker (Рекомендуется)
-Сервис полностью готов к запуску в контейнере. Переменные окружения должны передаваться извне (docker-compose или k8s).
+Значения внутри одного поля объединяются через `OR`, разные поля - через `AND`. Например `region=Краснодарский край,Карачаево-Черкесия&styles=ski,freeride` ищет локации в одном из указанных регионов и с одним из указанных стилей. `activity_id` в OpenAPI описан как массив integer, но также поддерживает CSV для удобства клиентов.
+
+`search` применяется как общее ограничение ко всему результату. Публичный API всегда возвращает только активные локации и не принимает `is_active` как query-параметр. Ручка `GET /api/locations/favorites` также возвращает только активные избранные локации.
+
+`location_id` и `activity_id` должны помещаться в диапазон PostgreSQL `integer`: от `1` до `2147483647`. Значения выше этого диапазона возвращают `404 Not Found`, чтобы не передавать некорректный integer в БД.
+
+### Справочники
+
+Справочники — это стили и уровни сложности, которыми помечаются локации. Пользователь может только читать их, админ — управлять ими.
+
+Публичные ручки (доступны пользователю):
+
+- `GET /api/references/styles` - список стилей с фильтрами `name`, `id`, `limit`, `offset`;
+- `GET /api/references/levels` - список уровней с фильтрами `name`, `id`, `limit`, `offset`;
+- `GET /api/references/styles/{style_id}/locations` - активные локации, связанные со стилем;
+- `GET /api/references/levels/{level_id}/locations` - активные локации, связанные с уровнем.
+
+
+Создание и обновление справочника проверяет уникальность имени: дубликат возвращает `400 Bad Request`. Удаление или обновление несуществующего элемента возвращает `404 Not Found`.
+
+### Активность локаций
+
+По умолчанию сервисные методы чтения возвращают только локации с `is_active=true`:
+
+- `LocationService.get_location(...)`;
+- `LocationService.list_locations(...)`;
+- `get_location_by_id(..., only_active=True)`.
+
+Для админских сценариев, где нужны все локации, включая неактивные, используется явное снятие ограничения:
+
+- `LocationService.get_location_for_admin(...)`;
+- `LocationService.list_all_locations(...)`;
+- `get_location_by_id(..., only_active=False)`.
+
+В избранное можно добавлять только активные локации. Попытка добавить неактивную локацию возвращает `400`.
+
+Локации создаются и удаляются через admin API этого сервиса. Публичные ручки читают каталог и хранят пользовательские избранные.
+
+## Конфигурация
+
+Переменные окружения:
+
+- `DB_LOCATION_SERVICE_HOST`
+- `DB_LOCATION_SERVICE_PORT`
+- `DB_LOCATION_SERVICE_NAME`
+- `DB_LOCATION_SERVICE_USER`
+- `DB_LOCATION_SERVICE_PASS`
+
+Для тестовой БД:
+
+- `TEST_DB_LOCATION_SERVICE_NAME`
+
+Entrypoint общий для сервисов и ждёт PostgreSQL и Redis перед запуском API. В Docker Swarm Redis должен быть доступен к моменту старта `location-service`.
+
+Health-check: `GET /api/locations/health`
