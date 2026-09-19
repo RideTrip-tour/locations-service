@@ -444,7 +444,7 @@ class ReferenceService:
         logger.info("%s with id %s was successfully deleted", model.__name__, item_id)
 
 
-async def get_reference_service(
+def get_reference_service(
     session: AsyncSession = Depends(get_async_session),
 ) -> ReferenceService:
     return ReferenceService(session)

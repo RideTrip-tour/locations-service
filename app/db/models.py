@@ -21,6 +21,8 @@ from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from app.db.base import Base
 
+CASCADE_DELETE_ORPHAN = "all, delete-orphan"
+
 
 class LocationChildMixin:
     """Shared columns and relationship for location junction tables."""
@@ -179,13 +181,13 @@ class Location(Base):
         onupdate=func.now(),
     )
     activities_rel: Mapped[list[LocationActivity]] = relationship(
-        back_populates="location", cascade="all, delete-orphan"
+        back_populates="location", cascade=CASCADE_DELETE_ORPHAN
     )
     styles_rel: Mapped[list[LocationStyle]] = relationship(
-        back_populates="location", cascade="all, delete-orphan"
+        back_populates="location", cascade=CASCADE_DELETE_ORPHAN
     )
     levels_rel: Mapped[list[LocationLevel]] = relationship(
-        back_populates="location", cascade="all, delete-orphan"
+        back_populates="location", cascade=CASCADE_DELETE_ORPHAN
     )
     city_rel: Mapped[City] = relationship(
         back_populates="locations", foreign_keys="Location.city_id"

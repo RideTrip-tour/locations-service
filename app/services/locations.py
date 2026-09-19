@@ -190,7 +190,7 @@ class LocationService:
         logger.info("Location with id %s was successfully deleted", location_id)
 
 
-async def get_location_service(
+def get_location_service(
     session: AsyncSession = Depends(get_async_session),
 ) -> LocationService:
     return LocationService(session)

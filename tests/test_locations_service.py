@@ -87,7 +87,8 @@ def make_location(**overrides):
     return SimpleNamespace(**payload)
 
 
-def test_get_location_raises_not_found(monkeypatch):
+@pytest.mark.asyncio
+async def test_get_location_raises_not_found(monkeypatch):
     session = FakeSession()
     service = LocationService(session)
 
@@ -99,7 +100,7 @@ def test_get_location_raises_not_found(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(service.get_location(1))
+        await service.get_location(1)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Location not found"

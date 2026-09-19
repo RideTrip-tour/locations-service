@@ -69,7 +69,7 @@ async def read_location(
     return await service.get_location_for_admin(location_id)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=AdminLocationRead)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_location(
     service: LocationServiceDep, location_data: AdminLocationCreate
 ) -> AdminLocationRead:
