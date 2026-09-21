@@ -22,9 +22,9 @@ jobs:
     env:
       DEBUG: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
           cache: "pip"
@@ -34,8 +34,8 @@ jobs:
 
       - name: Install deps
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.test.txt
+          python -m pip install --upgrade --only-binary :all: pip==25.0.1
+          python -m pip install --only-binary :all: -r requirements.test.txt
 
       - name: Lint (ruff)
         run: |
@@ -52,11 +52,11 @@ jobs:
       - lint_test
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -69,7 +69,7 @@ jobs:
           echo "ref=$image_ref" >> "$GITHUB_OUTPUT"
 
       - name: Build and push ${{ env.SERVICE_NAME }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           push: true
@@ -89,18 +89,23 @@ jobs:
       - name: Compute image ref
         run: echo "IMAGE_REF=${DOCKERHUB_NAMESPACE}/${SERVICE_NAME}:dev-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387
         with:
           ssh-private-key: ${{ secrets.SWARM_SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
-        run: ssh-keyscan -H "${{ secrets.SWARM_HOST }}" >> ~/.ssh/known_hosts
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+        run: ssh-keyscan -H "${SWARM_HOST}" >> ~/.ssh/known_hosts
 
       - name: Create docker context
+        env:
+          SWARM_USER: ${{ secrets.SWARM_USER }}
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
         run: |
           echo "DEPLOY_STEP=Preparation" >> "$GITHUB_ENV"
 
-          docker context create swarm --docker "host=ssh://${{ secrets.SWARM_USER }}@${{ secrets.SWARM_HOST }}"
+          docker context create swarm --docker "host=ssh://${SWARM_USER}@${SWARM_HOST}"
           docker --context swarm info
 
       - name: Run ${{ env.SERVICE_NAME }} migrations via entrypoint
