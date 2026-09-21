@@ -94,13 +94,18 @@ jobs:
           ssh-private-key: ${{ secrets.SWARM_SSH_PRIVATE_KEY }}
 
       - name: Add known hosts
-        run: ssh-keyscan -H "${{ secrets.SWARM_HOST }}" >> ~/.ssh/known_hosts
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+        run: ssh-keyscan -H "${SWARM_HOST}" >> ~/.ssh/known_hosts
 
       - name: Create docker context
+        env:
+          SWARM_USER: ${{ secrets.SWARM_USER }}
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
         run: |
           echo "DEPLOY_STEP=Preparation" >> "$GITHUB_ENV"
 
-          docker context create swarm --docker "host=ssh://${{ secrets.SWARM_USER }}@${{ secrets.SWARM_HOST }}"
+          docker context create swarm --docker "host=ssh://${SWARM_USER}@${SWARM_HOST}"
           docker --context swarm info
 
       - name: Run ${{ env.SERVICE_NAME }} migrations via entrypoint
