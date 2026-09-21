@@ -88,7 +88,7 @@ if [[ "$MODE" = "migrate" ]]; then
   run_migrations
   exit 0
 fi
-git 
+
 wait_for_redis
 
 start_api
