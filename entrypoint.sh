@@ -60,23 +60,23 @@ start_api() {
 }
 
 # ---------- Swarm secrets (если используются) ----------
-if [ -n "${DB_LOCATION_SERVICE_HOST_FILE:-}" ]; then
+if [[ -n "${DB_LOCATION_SERVICE_HOST_FILE:-}" ]]; then
   DB_HOST=$(cat "$DB_LOCATION_SERVICE_HOST_FILE")
 fi
 
-if [ -n "${DB_LOCATION_SERVICE_PORT_FILE:-}" ]; then
+if [[ -n "${DB_LOCATION_SERVICE_PORT_FILE:-}" ]]; then
   DB_PORT=$(cat "$DB_LOCATION_SERVICE_PORT_FILE")
 fi
 
-if [ -n "${DB_LOCATION_SERVICE_USER_FILE:-}" ]; then
+if [[ -n "${DB_LOCATION_SERVICE_USER_FILE:-}" ]]; then
   DB_USER=$(cat "$DB_LOCATION_SERVICE_USER_FILE")
 fi
 
-if [ -n "${REDIS_HOST_FILE:-}" ]; then
+if [[ -n "${REDIS_HOST_FILE:-}" ]]; then
   REDIS_HOST=$(cat "$REDIS_HOST_FILE")
 fi
 
-if [ -n "${REDIS_PORT_FILE:-}" ]; then
+if [[ -n "${REDIS_PORT_FILE:-}" ]]; then
   REDIS_PORT=$(cat "$REDIS_PORT_FILE")
 fi
 
@@ -84,11 +84,11 @@ fi
 # ---------- Ожидание сервисов ----------
 wait_for_postgres
 
-if [ "$MODE" = "migrate" ]; then
+if [[ "$MODE" = "migrate" ]]; then
   run_migrations
   exit 0
 fi
-
+git 
 wait_for_redis
 
 start_api
