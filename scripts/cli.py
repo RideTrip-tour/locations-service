@@ -1,10 +1,3 @@
-"""CLI для сидеров и служебных команд.
-
-Примеры:
-    python -m scripts.cli seed-geo-data
-    python -m scripts.cli seed-geo-data --country RU
-"""
-
 import asyncio
 import logging
 
