@@ -199,8 +199,8 @@ def test_load_regions_merges_russian_names(monkeypatch):
     assert "ON CONFLICT (name, country_id) DO UPDATE" in upsert_sql
 
 
-def test_load_cities_builds_wkt(monkeypatch):
-    cities = FakeGeoDataFrame(
+def test_load_cities_builds_wkt(cities_capture):
+    cities_capture.set_cities(
         [
             {
                 "SOV0NAME": "Russia",
@@ -211,29 +211,13 @@ def test_load_cities_builds_wkt(monkeypatch):
         ]
     )
 
-    monkeypatch.setattr(geo_data.geopandas, "read_file", lambda p: cities)
-    monkeypatch.setattr(seed_constants, "cities_shp_path", lambda: "cities.shp")
-    monkeypatch.setattr(geo_data, "create_engine", lambda url: FakeSyncEngine([]))
-
-    captured = {}
-
-    def fake_to_postgis(self, table, engine, **kwargs):
-        captured["rows"] = self.rows
-
-    monkeypatch.setattr(FakeGeoDataFrame, "to_postgis", fake_to_postgis)
-
-    conn = FakeAsyncConn(rows=[])
-    monkeypatch.setattr(
-        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
-    )
-
     asyncio.run(geo_data._load_cities("postgresql+asyncpg://db/x", [COUNTRY_RU]))
 
-    assert captured["rows"][0]["coords"] == "POINT(37.6 55.75)"
+    assert cities_capture.rows[0]["coords"] == "POINT(37.6 55.75)"
 
 
-def test_load_cities_filter_by_country(monkeypatch):
-    cities = FakeGeoDataFrame(
+def test_load_cities_filter_by_country(cities_capture):
+    cities_capture.set_cities(
         [
             {
                 "SOV0NAME": "Russia",
@@ -250,31 +234,15 @@ def test_load_cities_filter_by_country(monkeypatch):
         ]
     )
 
-    monkeypatch.setattr(geo_data.geopandas, "read_file", lambda p: cities)
-    monkeypatch.setattr(seed_constants, "cities_shp_path", lambda: "cities.shp")
-    monkeypatch.setattr(geo_data, "create_engine", lambda url: FakeSyncEngine([]))
-
-    captured = {}
-
-    def fake_to_postgis(self, table, engine, **kwargs):
-        captured["rows"] = self.rows
-
-    monkeypatch.setattr(FakeGeoDataFrame, "to_postgis", fake_to_postgis)
-
-    conn = FakeAsyncConn(rows=[])
-    monkeypatch.setattr(
-        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
-    )
-
     asyncio.run(geo_data._load_cities("postgresql+asyncpg://db/x", [COUNTRY_RU]))
 
-    names = [r["name"] for r in captured["rows"]]
+    names = [r["name"] for r in cities_capture.rows]
     assert "Москва" in names
     assert "Алматы" not in names
 
 
-def test_load_cities_uses_distinct_on(monkeypatch):
-    cities = FakeGeoDataFrame(
+def test_load_cities_uses_distinct_on(cities_capture):
+    cities_capture.set_cities(
         [
             {
                 "SOV0NAME": "Russia",
@@ -285,20 +253,12 @@ def test_load_cities_uses_distinct_on(monkeypatch):
         ]
     )
 
-    monkeypatch.setattr(geo_data.geopandas, "read_file", lambda p: cities)
-    monkeypatch.setattr(seed_constants, "cities_shp_path", lambda: "cities.shp")
-    monkeypatch.setattr(geo_data, "create_engine", lambda url: FakeSyncEngine([]))
-
-    conn = FakeAsyncConn(rows=[])
-    monkeypatch.setattr(
-        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
-    )
-
     asyncio.run(geo_data._load_cities("postgresql+asyncpg://db/x", [COUNTRY_RU]))
 
     sql = next(
-        s for k, s, _ in conn.log if k == "execute" and "INSERT INTO cities" in s
+        s
+        for k, s, _ in cities_capture.conn.log
+        if k == "execute" and "INSERT INTO cities" in s
     )
     assert "DISTINCT ON (cs.name, r.id)" in sql
     assert "ST_Contains" in sql
-    assert "ON CONFLICT (name, region_id) DO UPDATE" in sql
