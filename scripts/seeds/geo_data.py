@@ -10,9 +10,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from scripts.seeds.constants import (
     CITIES_URL,
     DATA_DIR,
-    REGIONS_ADM1_URL,
+    REGIONS_NAMES_URL,
+    REGIONS_POLYGON_URL,
+    SUPPORTED_COUNTRIES,
     cities_shp_path,
     regions_path,
+    regions_shp_path,
     to_sync_url,
 )
 
@@ -20,6 +23,8 @@ logger = logging.getLogger("location_service")
 
 
 async def run_seed(database_url: str, countries: list[dict[str, str]] | None = None):
+    if countries is None:
+        countries = SUPPORTED_COUNTRIES
     if not countries:
         logger.warning("No countries to seed.")
         return
@@ -78,11 +83,22 @@ def _download_files(countries: list[dict[str, str]]):
         reg_path = regions_path(country["code"])
         if reg_path.exists():
             continue
-        url = REGIONS_ADM1_URL.format(gb_open=country["gb_open"])
+        url = REGIONS_POLYGON_URL.format(gb_open=country["gb_open"])
         logger.info("Downloading regions for %s...", country["name_en"])
         regions_request = requests.get(url)
         regions_request.raise_for_status()
         reg_path.write_bytes(regions_request.content)
+
+    admin1 = regions_shp_path()
+    if not admin1.exists():
+        logger.info("Downloading Natural Earth Admin 1...")
+        r = requests.get(REGIONS_NAMES_URL)
+        r.raise_for_status()
+        zip_path = DATA_DIR / "admin1.zip"
+        zip_path.write_bytes(r.content)
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(DATA_DIR)
+        zip_path.unlink()
 
     cities_path = cities_shp_path()
     if cities_path.exists():
@@ -112,10 +128,30 @@ async def _load_country(database_url: str, country: dict[str, str]) -> None:
 
 async def _load_regions(database_url: str, country: dict[str, str]) -> None:
     geo_data_frame = geopandas.read_file(regions_path(country["code"]))
-    if "shapeName" in geo_data_frame.columns:
-        geo_data_frame = geo_data_frame.rename(columns={"shapeName": "name"})
 
+    ne = geopandas.read_file(regions_shp_path())
+    ne_country = ne[ne["admin"] == country["name_en"]][["iso_3166_2", "name_ru"]]
+
+    geo_data_frame = geo_data_frame.merge(
+        ne_country,
+        left_on="shapeISO",
+        right_on="iso_3166_2",
+        how="left",
+    )
+
+    geo_data_frame["name"] = geo_data_frame["name_ru"].fillna(
+        geo_data_frame["shapeName"]
+    )
     geo_data_frame["name"] = geo_data_frame["name"].astype(str).str.strip()
+    dup_mask = geo_data_frame.duplicated("name", keep="first")
+    geo_data_frame["name"] = [
+        shape if dup else name
+        for name, shape, dup in zip(
+            geo_data_frame["name"].values,
+            geo_data_frame["shapeName"].values,
+            dup_mask.values,
+        )
+    ]
 
     geo_data_frame = geo_data_frame[["name", "geometry"]]
     geo_data_frame = geo_data_frame.dropna(subset=["name", "geometry"])
@@ -203,9 +239,16 @@ async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> No
         result = await conn.execute(
             text("""
                 INSERT INTO cities (name, region_id, coords)
-                SELECT cs.name, r.id, cs.coords::geography
-                FROM cities_staging cs
-                JOIN regions r ON ST_Contains(r.border::geometry, cs.coords)
+                SELECT name, region_id, coords
+                FROM (
+                    SELECT DISTINCT ON (cs.name, r.id)
+                        cs.name,
+                        r.id AS region_id,
+                        cs.coords::geography AS coords
+                    FROM cities_staging cs
+                    JOIN regions r ON ST_Contains(r.border::geometry, cs.coords)
+                    ORDER BY cs.name, r.id
+                ) AS deduped
                 ON CONFLICT (name, region_id) DO UPDATE
                     SET coords = EXCLUDED.coords
             """)
