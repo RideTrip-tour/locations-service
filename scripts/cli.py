@@ -23,6 +23,9 @@ def seed_geo_data(
         "-c",
         help="ISO-код страны (RU, KZ, ...). Без флага — все страны из конфига.",
     ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Принудительная синхронизация."
+    ),
 ) -> None:
     """Загрузить справочники стран/регионов/городов (идемпотентно)."""
     logging.basicConfig(
@@ -37,7 +40,7 @@ def seed_geo_data(
         if not countries:
             raise typer.BadParameter(f"Country {code} not in SUPPORTED_COUNTRIES")
 
-    asyncio.run(run_seed(settings.DATABASE_URL, countries=countries))
+    asyncio.run(run_seed(settings.DATABASE_URL, countries=countries, force=force))
 
 
 if __name__ == "__main__":

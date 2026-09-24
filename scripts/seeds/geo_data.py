@@ -1,4 +1,5 @@
 import logging
+import shutil
 import zipfile
 
 import geopandas
@@ -22,7 +23,11 @@ from scripts.seeds.constants import (
 logger = logging.getLogger("location_service")
 
 
-async def run_seed(database_url: str, countries: list[dict[str, str]] | None = None):
+async def run_seed(
+    database_url: str,
+    countries: list[dict[str, str]] | None = None,
+    force: bool = False,
+):
     if countries is None:
         countries = SUPPORTED_COUNTRIES
     if not countries:
@@ -31,9 +36,11 @@ async def run_seed(database_url: str, countries: list[dict[str, str]] | None = N
     enigene = create_async_engine(database_url)
     async with enigene.begin() as conn:
         await _check_postgis(conn)
-        if await _is_in_db(conn, countries):
+        if not force and await _is_in_db(conn, countries):
             logger.info("Geo data already loaded, skipping.")
             return
+        if force:
+            logger.info("Force mode: syncing data.")
     try:
         _download_files(countries)
         for country in countries:
@@ -43,6 +50,8 @@ async def run_seed(database_url: str, countries: list[dict[str, str]] | None = N
             await _load_crimea_regions(database_url)
         await _load_cities(database_url, countries)
         logger.info("Geo data was successfully loaded.")
+        shutil.rmtree(DATA_DIR, ignore_errors=True)
+        logger.info("Geo data cache directory removed.")
     finally:
         await _clean_staging(database_url, countries)
 
@@ -196,12 +205,6 @@ async def _load_regions(database_url: str, country: dict[str, str]) -> None:
             {"country": country["name"]},
         )
         await conn.execute(text(f"DROP TABLE {staging}"))
-        await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_regions_border "
-                "ON regions USING gist (border)"
-            )
-        )
     logger.info("Regions upserted for %s (rows: %d)", country["code"], result.rowcount)
 
 
@@ -316,12 +319,6 @@ async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> No
         )
         names = [row[0] for row in unmatched_cities]
         await conn.execute(text("DROP TABLE cities_staging"))
-        await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_cities_coords "
-                "ON cities USING gist (coords)"
-            )
-        )
     logger.info(
         "Cities upserted (rows: %s, unmatched: %s)", result.rowcount, len(names)
     )

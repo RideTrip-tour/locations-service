@@ -96,6 +96,116 @@ def test_run_seed_calls_steps_in_order(monkeypatch):
     ]
 
 
+def test_run_seed_removes_cache_after_success(monkeypatch, tmp_path):
+    conn = FakeAsyncConn(scalars=[1, None])
+    called = []
+
+    fake_data_dir = tmp_path / "geo_data"
+    fake_data_dir.mkdir()
+    monkeypatch.setattr(geo_data, "DATA_DIR", fake_data_dir)
+
+    monkeypatch.setattr(
+        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
+    )
+
+    async def noop(*_):
+        return None
+
+    def fake_rmtree(path, ignore_errors=False):
+        called.append(("rmtree", str(path), ignore_errors))
+
+    monkeypatch.setattr(geo_data.shutil, "rmtree", fake_rmtree)
+    monkeypatch.setattr(geo_data, "_download_files", lambda countries: None)
+    monkeypatch.setattr(geo_data, "_load_country", noop)
+    monkeypatch.setattr(geo_data, "_load_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_crimea_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_cities", noop)
+    monkeypatch.setattr(geo_data, "_clean_staging", noop)
+
+    asyncio.run(geo_data.run_seed("postgresql+asyncpg://db/x", [COUNTRY_RU]))
+
+    assert any(call[0] == "rmtree" and str(fake_data_dir) in call[1] for call in called)
+
+
+def test_run_seed_force_skips_is_in_db(monkeypatch, tmp_path, caplog):
+    conn = FakeAsyncConn(scalars=[1])
+    called = []
+
+    fake_data_dir = tmp_path / "geo_data"
+    fake_data_dir.mkdir()
+    monkeypatch.setattr(seed_constants, "DATA_DIR", fake_data_dir)
+
+    monkeypatch.setattr(
+        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
+    )
+
+    async def record_country(url, country):
+        called.append(("country", country["code"]))
+
+    async def noop(*_):
+        return None
+
+    def record_download(countries):
+        called.append(("download", len(countries)))
+
+    monkeypatch.setattr(geo_data, "_download_files", record_download)
+    monkeypatch.setattr(geo_data, "_load_country", record_country)
+    monkeypatch.setattr(geo_data, "_load_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_crimea_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_cities", noop)
+    monkeypatch.setattr(geo_data, "_clean_staging", noop)
+    monkeypatch.setattr(geo_data.shutil, "rmtree", lambda *a, **k: None)
+
+    with caplog.at_level("INFO"):
+        asyncio.run(
+            geo_data.run_seed(
+                "postgresql+asyncpg://db/x",
+                [COUNTRY_RU],
+                force=True,
+            )
+        )
+
+    assert ("download", 1) in called
+    assert ("country", "RU") in called
+
+    assert "Force mode" in caplog.text
+    assert "already loaded" not in caplog.text
+
+
+def test_run_seed_without_force_checks_is_in_db(monkeypatch, tmp_path, caplog):
+    conn = FakeAsyncConn(scalars=[1, 1, 10, 50])
+
+    fake_data_dir = tmp_path / "geo_data"
+    fake_data_dir.mkdir()
+    monkeypatch.setattr(seed_constants, "DATA_DIR", fake_data_dir)
+
+    monkeypatch.setattr(
+        geo_data, "create_async_engine", lambda url: FakeAsyncEngine(conn)
+    )
+
+    async def noop(*_):
+        return None
+
+    monkeypatch.setattr(geo_data, "_download_files", noop)
+    monkeypatch.setattr(geo_data, "_load_country", noop)
+    monkeypatch.setattr(geo_data, "_load_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_crimea_regions", noop)
+    monkeypatch.setattr(geo_data, "_load_cities", noop)
+    monkeypatch.setattr(geo_data, "_clean_staging", noop)
+
+    with caplog.at_level("INFO"):
+        asyncio.run(
+            geo_data.run_seed(
+                "postgresql+asyncpg://db/x",
+                [COUNTRY_RU],
+                force=False,
+            )
+        )
+
+    assert "already loaded, skipping" in caplog.text
+    assert "Force mode" not in caplog.text
+
+
 def test_run_seed_defaults_to_supported_countries(monkeypatch):
     conn = FakeAsyncConn(scalars=[1, None])
     seen = []
