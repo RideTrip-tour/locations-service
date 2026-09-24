@@ -32,7 +32,7 @@ def test_run_seed_warns_on_empty_countries(caplog):
 
 
 def test_run_seed_skips_when_already_loaded(monkeypatch, caplog):
-    conn = FakeAsyncConn(scalars=[1, 10, 50])
+    conn = FakeAsyncConn(scalars=[1, 1, 10, 50])
 
     monkeypatch.setattr(
         geo_data,
@@ -52,7 +52,7 @@ def test_run_seed_skips_when_already_loaded(monkeypatch, caplog):
 
 
 def test_run_seed_calls_steps_in_order(monkeypatch):
-    conn = FakeAsyncConn(scalars=[None])
+    conn = FakeAsyncConn(scalars=[1, None])
     called = []
 
     monkeypatch.setattr(
@@ -73,10 +73,14 @@ def test_run_seed_calls_steps_in_order(monkeypatch):
     async def record_cities(url, countries):
         called.append(("cities", len(countries)))
 
+    async def noop_crimea(url):
+        called.append(("crimea", 0))
+
     monkeypatch.setattr(geo_data, "_download_files", record_download)
     monkeypatch.setattr(geo_data, "_load_country", record_country)
     monkeypatch.setattr(geo_data, "_load_regions", record_regions)
     monkeypatch.setattr(geo_data, "_load_cities", record_cities)
+    monkeypatch.setattr(geo_data, "_load_crimea_regions", noop_crimea)
 
     kz = make_country(code="KZ", name="Казахстан", name_en="Kazakhstan", gb_open="KAZ")
     asyncio.run(geo_data.run_seed("postgresql+asyncpg://db/x", [COUNTRY_RU, kz]))
@@ -87,12 +91,13 @@ def test_run_seed_calls_steps_in_order(monkeypatch):
         ("regions", "RU"),
         ("country", "KZ"),
         ("regions", "KZ"),
+        ("crimea", 0),
         ("cities", 2),
     ]
 
 
 def test_run_seed_defaults_to_supported_countries(monkeypatch):
-    conn = FakeAsyncConn(scalars=[None])
+    conn = FakeAsyncConn(scalars=[1, None])
     seen = []
 
     monkeypatch.setattr(
@@ -111,6 +116,7 @@ def test_run_seed_defaults_to_supported_countries(monkeypatch):
     monkeypatch.setattr(geo_data, "_load_country", noop)
     monkeypatch.setattr(geo_data, "_load_regions", noop)
     monkeypatch.setattr(geo_data, "_load_cities", noop)
+    monkeypatch.setattr(geo_data, "_load_crimea_regions", noop)
 
     asyncio.run(geo_data.run_seed("postgresql+asyncpg://db/x"))
 
@@ -261,4 +267,4 @@ def test_load_cities_uses_distinct_on(cities_capture):
         if k == "execute" and "INSERT INTO cities" in s
     )
     assert "DISTINCT ON (cs.name, r.id)" in sql
-    assert "ST_Contains" in sql
+    assert "ST_DWithin" in sql

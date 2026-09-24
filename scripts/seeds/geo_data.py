@@ -30,16 +30,29 @@ async def run_seed(database_url: str, countries: list[dict[str, str]] | None = N
         return
     enigene = create_async_engine(database_url)
     async with enigene.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await _check_postgis(conn)
         if await _is_in_db(conn, countries):
             logger.info("Geo data already loaded, skipping.")
             return
-    _download_files(countries)
-    for country in countries:
-        await _load_country(database_url, country)
-        await _load_regions(database_url, country)
-    await _load_cities(database_url, countries)
-    logger.info("Geo data was successfully loaded.")
+    try:
+        _download_files(countries)
+        for country in countries:
+            await _load_country(database_url, country)
+            await _load_regions(database_url, country)
+        if any(country["code"] == "RU" for country in countries):
+            await _load_crimea_regions(database_url)
+        await _load_cities(database_url, countries)
+        logger.info("Geo data was successfully loaded.")
+    finally:
+        await _clean_staging(database_url, countries)
+
+
+async def _check_postgis(conn):
+    exists = await conn.scalar(
+        text("SELECT 1 FROM pg_extension WHERE extname = 'postgis';")
+    )
+    if not exists:
+        raise RuntimeError("PostGIS is not installed.")
 
 
 async def _is_in_db(conn, countries: list[dict[str, str]]) -> bool:
@@ -192,6 +205,43 @@ async def _load_regions(database_url: str, country: dict[str, str]) -> None:
     logger.info("Regions upserted for %s (rows: %d)", country["code"], result.rowcount)
 
 
+async def _load_crimea_regions(database_url: str) -> None:
+    ne = geopandas.read_file(regions_shp_path())
+    crimea = ne[ne["iso_3166_2"].isin(["UA-43", "UA-40"])].copy()
+    name_map = {"UA-43": "Республика Крым", "UA-40": "Севастополь"}
+    crimea["name"] = crimea["iso_3166_2"].map(name_map)
+
+    crimea = crimea[["name", "geometry"]]
+    crimea = crimea.set_crs(4326, allow_override=True)
+    crimea = crimea.rename(columns={"geometry": "border"})
+    crimea = crimea.set_geometry("border")
+
+    sync_engine = create_engine(to_sync_url(database_url))
+    crimea.to_postgis(
+        "regions_staging_crimea",
+        sync_engine,
+        if_exists="replace",
+        index=False,
+        dtype={"border": Geometry("MULTIPOLYGON", srid=4326)},
+    )
+    sync_engine.dispose()
+    async with create_async_engine(database_url).begin() as conn:
+        result = await conn.execute(
+            text("""
+                INSERT INTO regions (name, country_id, border)
+                SELECT rs.name, c.id, rs.border
+                FROM regions_staging_crimea rs
+                JOIN countries c ON c.name = :country
+                ON CONFLICT (name, country_id) DO UPDATE
+                    SET border = EXCLUDED.border
+            """),
+            {"country": "Россия"},
+        )
+        await conn.execute(text("DROP TABLE regions_staging_crimea"))
+
+    logger.info("Crimea regions upserted (rows: %d)", result.rowcount)
+
+
 async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> None:
     geo_data_frame = geopandas.read_file(cities_shp_path())
 
@@ -246,7 +296,7 @@ async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> No
                         r.id AS region_id,
                         cs.coords::geography AS coords
                     FROM cities_staging cs
-                    JOIN regions r ON ST_Contains(r.border::geometry, cs.coords)
+                    JOIN regions r ON ST_DWithin(r.border::geometry, cs.coords, 0.01)
                     ORDER BY cs.name, r.id
                 ) AS deduped
                 ON CONFLICT (name, region_id) DO UPDATE
@@ -259,7 +309,7 @@ async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> No
                 FROM cities_staging cs
                 WHERE NOT EXISTS (
                     SELECT 1 FROM regions r
-                    WHERE ST_Contains(r.border::geometry, cs.coords)
+                    WHERE ST_DWithin(r.border::geometry, cs.coords, 0.01)
                 )
                 ORDER BY cs.name
             """)
@@ -273,7 +323,17 @@ async def _load_cities(database_url: str, countries: list[dict[str, str]]) -> No
             )
         )
     logger.info(
-        "Cities upserted (rows: %s, unmatched: %s)", result.rowcount, unmatched_cities
+        "Cities upserted (rows: %s, unmatched: %s)", result.rowcount, len(names)
     )
     if unmatched_cities:
         logger.warning("Unmatched cities (%d): %s", len(names), names)
+
+
+async def _clean_staging(database_url: str, countries: list[dict[str, str]]) -> None:
+    async with create_async_engine(database_url).begin() as conn:
+        for country in countries:
+            await conn.execute(
+                text(f"DROP TABLE IF EXISTS regions_staging_{country['code'].lower()}")
+            )
+        await conn.execute(text("DROP TABLE IF EXISTS regions_staging_crimea"))
+        await conn.execute(text("DROP TABLE IF EXISTS cities_staging"))
