@@ -184,7 +184,7 @@ async def _get_distance_to_city_km(
             )
         ).where(City.id == city_id)
     )
-    distance_m = result.scalar()
+    distance_m = result.scalars().first()
     if distance_m is None:
         return None
     return (Decimal(str(distance_m)) / Decimal(1000)).quantize(

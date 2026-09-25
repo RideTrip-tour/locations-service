@@ -33,7 +33,7 @@ from app.schemas.admin import AdminLocationCreate
 from app.services.locations import LocationService
 
 from app.exceptions import CityNotFoundError
-from tests.fakes import make_location
+from tests.fakes import make_location, make_location_execute_mock
 
 
 class FakeSession:
@@ -471,21 +471,15 @@ def test_admin_create_location_links_styles_and_levels(monkeypatch):
     new_location.styles_rel = [LocationStyle(style_id=1)]
     new_location.levels_rel = [LocationLevel(level_id=2)]
 
-    async def fake_execute_create(statement):
-        compiled = str(statement.compile(dialect=postgresql.dialect()))
-        if "ST_Distance" in compiled:
-            return SimpleNamespace(scalar=lambda: 0)
-        if "cities.id = %(" in compiled:
-            return SimpleNamespace(scalar_one_or_none=lambda: city)
-        if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [style]))
-        if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [level]))
-        if "locations.id IS NULL" in compiled:
-            return SimpleNamespace(scalar_one=lambda: new_location)
-        raise AssertionError(f"unexpected statement: {compiled}")
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=0,
+        styles=[style],
+        levels=[level],
+    )
 
-    monkeypatch.setattr(session, "execute", fake_execute_create)
+    monkeypatch.setattr(session, "execute", fake_execute)
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
@@ -520,19 +514,12 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
         city_id=1,
     )
 
-    async def fake_execute(statement):
-        compiled = str(statement.compile(dialect=postgresql.dialect()))
-        if "ST_Distance" in compiled:
-            return SimpleNamespace(scalar=lambda: 0)
-        if "cities.id = %(" in compiled:
-            return SimpleNamespace(scalar_one_or_none=lambda: city)
-        if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-        if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-        if "locations.id IS NULL" in compiled:
-            return SimpleNamespace(scalar_one=lambda: new_location)
-        raise AssertionError(f"unexpected statement: {compiled}")
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=0,
+    )
+    print(fake_execute)
 
     monkeypatch.setattr(session, "execute", fake_execute)
     monkeypatch.setattr(session, "add", lambda obj: None)
@@ -619,27 +606,11 @@ def test_admin_create_location_computes_distance(monkeypatch):
         distance_to_city_km=Decimal("1681.346"),
     )
 
-    async def fake_execute(statement):
-        compiled = str(statement.compile(dialect=postgresql.dialect()))
-
-        if "ST_Distance" in compiled:
-            return SimpleNamespace(
-                scalar=lambda: 1681346.123,
-            )
-
-        if "cities.id = %(" in compiled:
-            return SimpleNamespace(scalar_one_or_none=lambda: city)
-
-        if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-
-        if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-
-        if "locations.id IS NULL" in compiled:
-            return SimpleNamespace(scalar_one=lambda: new_location)
-
-        raise AssertionError(f"unexpected statement: {compiled}")
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=1681346.123,
+    )
 
     monkeypatch.setattr(session, "execute", fake_execute)
     monkeypatch.setattr(session, "add", lambda obj: None)
