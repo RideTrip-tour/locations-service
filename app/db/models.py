@@ -110,6 +110,10 @@ class Region(ReferenceMixin, Base):
     country_id: Mapped[int] = mapped_column(
         ForeignKey("countries.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    border: Mapped[WKBElement] = mapped_column(
+        Geography(geometry_type="MULTIPOLYGON", srid=4326),
+        nullable=False,
+    )
 
     country: Mapped[Country] = relationship(back_populates="regions")
     cities: Mapped[list[City]] = relationship(
