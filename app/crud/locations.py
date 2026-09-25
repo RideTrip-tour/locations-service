@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from geoalchemy2.elements import WKBElement
+from geoalchemy2.functions import ST_Distance
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -164,6 +167,28 @@ def _load_location_options():
         joinedload(Location.city_rel)
         .joinedload(City.region)
         .joinedload(Region.country),
+    )
+
+
+async def _get_distance_to_city_km(
+    session: AsyncSession,
+    *,
+    location_coords: WKBElement,
+    city_id: int,
+) -> Decimal | None:
+    result = await session.execute(
+        select(
+            ST_Distance(
+                location_coords,
+                City.coords,
+            )
+        ).where(City.id == city_id)
+    )
+    distance_m = result.scalar()
+    if distance_m is None:
+        return None
+    return (Decimal(str(distance_m)) / Decimal(1000)).quantize(
+        Decimal("0.001"), rounding=ROUND_HALF_UP
     )
 
 
@@ -345,17 +370,22 @@ async def admin_create_location(
     levels = location_data.pop("levels", [])
 
     city_id = location_data.pop("city_id")
-    latitude = location_data.pop(
-        "latitude"
-    )  # времено без расчетов для проверки создания
+    latitude = location_data.pop("latitude")
     longitude = location_data.pop("longitude")
-    coords = make_coords(latitude, longitude)
+    location_coords = make_coords(latitude, longitude)
 
     city = await session.execute(select(City).where(City.id == city_id))
     if city.scalar_one_or_none() is None:
         raise CityNotFoundError(city_id)
 
-    new_location = Location(**location_data, city_id=city_id, coords=coords)
+    new_location = Location(
+        **location_data,
+        city_id=city_id,
+        coords=location_coords,
+        distance_to_city_km=await _get_distance_to_city_km(
+            session, location_coords=location_coords, city_id=city_id
+        ),
+    )
     new_location.activities_rel = [
         LocationActivity(activity_id=activity_id) for activity_id in activity_ids
     ]

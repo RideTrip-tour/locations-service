@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -503,6 +504,8 @@ def test_admin_create_location_links_styles_and_levels(monkeypatch):
 
     async def fake_execute_create(statement):
         compiled = str(statement.compile(dialect=postgresql.dialect()))
+        if "ST_Distance" in compiled:
+            return SimpleNamespace(scalar=lambda: 0)
         if "cities.id = %(" in compiled:
             return SimpleNamespace(scalar_one_or_none=lambda: city)
         if "styles" in compiled:
@@ -550,6 +553,8 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
 
     async def fake_execute(statement):
         compiled = str(statement.compile(dialect=postgresql.dialect()))
+        if "ST_Distance" in compiled:
+            return SimpleNamespace(scalar=lambda: 0)
         if "cities.id = %(" in compiled:
             return SimpleNamespace(scalar_one_or_none=lambda: city)
         if "styles" in compiled:
@@ -620,3 +625,58 @@ def test_admin_location_create_requires_city_id():
         )
 
     assert "city_id" in exc_info.value.errors()[0]["loc"]
+
+
+def test_admin_create_location_computes_distance(monkeypatch):
+    session = FakeSession()
+    location_in = SimpleNamespace(
+        model_dump=lambda exclude_unset: {
+            "name": "Роза Хутор",
+            "city_id": 1,
+            "latitude": 43.68,
+            "longitude": 40.29,
+            "activity_ids": [],
+            "styles": [],
+            "levels": [],
+        }
+    )
+
+    city = SimpleNamespace(id=1, region_id=1, region=SimpleNamespace(country_id=1))
+    new_location = Location(
+        id=8,
+        slug="rosa",
+        name="Роза Хутор",
+        city_id=1,
+        distance_to_city_km=Decimal("1681.346"),
+    )
+
+    async def fake_execute(statement):
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+        if "ST_Distance" in compiled:
+            return SimpleNamespace(
+                scalar=lambda: 1681346.123,
+            )
+
+        if "cities.id = %(" in compiled:
+            return SimpleNamespace(scalar_one_or_none=lambda: city)
+
+        if "styles" in compiled:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+
+        if "levels" in compiled:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+
+        if "locations.id IS NULL" in compiled:
+            return SimpleNamespace(scalar_one=lambda: new_location)
+
+        raise AssertionError(f"unexpected statement: {compiled}")
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+    monkeypatch.setattr(session, "add", lambda obj: None)
+    monkeypatch.setattr(session, "commit", session.commit)
+
+    result = asyncio.run(admin_create_location(session, location_in))
+
+    assert isinstance(result, Location)
+    assert result.distance_to_city_km == Decimal("1681.346")
