@@ -1,6 +1,7 @@
 """Shared fakes and factories for service tests."""
 
 from types import SimpleNamespace
+
 from sqlalchemy.dialects import postgresql
 
 
@@ -296,10 +297,14 @@ def make_location_execute_mock(
             return SimpleNamespace(scalar_one_or_none=lambda: city)
 
         if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: list(styles)))
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: list(styles))
+            )
 
         if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: list(levels)))
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: list(levels))
+            )
 
         if "locations.id IS NULL" in compiled:
             return SimpleNamespace(scalar_one=lambda: new_location)
