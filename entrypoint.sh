@@ -59,6 +59,12 @@ start_api() {
     --workers 1
 }
 
+# ---------- Запуск сидов ----------
+run_seeds() {
+  log "Running seeds..."
+  python -m scripts.cli seed-geo-data
+}
+
 # ---------- Swarm secrets (если используются) ----------
 if [[ -n "${DB_LOCATION_SERVICE_HOST_FILE:-}" ]]; then
   DB_HOST=$(cat "$DB_LOCATION_SERVICE_HOST_FILE")
@@ -86,6 +92,11 @@ wait_for_postgres
 
 if [[ "$MODE" = "migrate" ]]; then
   run_migrations
+  exit 0
+fi
+
+if [[ "$MODE" = "seeds" ]]; then
+  run_seeds
   exit 0
 fi
 

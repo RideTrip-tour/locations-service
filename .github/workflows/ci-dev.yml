@@ -147,6 +147,45 @@ jobs:
 
           docker --context swarm service logs "$service_name" || true
 
+      - name: Run ${{ env.SERVICE_NAME }} seeds via entrypoint
+        run: |
+          set -euo pipefail
+          echo "DEPLOY_STEP=Seeds" >> "$GITHUB_ENV"
+
+          service_name="${SERVICE_NAME}-seeds-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          cleanup() {
+            docker --context swarm service rm "$service_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          cleanup
+
+          if ! docker --context swarm service create \
+            --name "$service_name" \
+            --detach=false \
+            --restart-condition none \
+            --mode replicated-job \
+            --network "$DATA_NETWORK" \
+            --secret DB_LOCATION_SERVICE_HOST \
+            --secret DB_LOCATION_SERVICE_PORT \
+            --secret DB_LOCATION_SERVICE_NAME \
+            --secret DB_LOCATION_SERVICE_USER \
+            --secret DB_LOCATION_SERVICE_PASS \
+            --env APP_MODE=seeds \
+            --env DB_LOCATION_SERVICE_HOST_FILE=/run/secrets/DB_LOCATION_SERVICE_HOST \
+            --env DB_LOCATION_SERVICE_PORT_FILE=/run/secrets/DB_LOCATION_SERVICE_PORT \
+            --env DB_LOCATION_SERVICE_NAME_FILE=/run/secrets/DB_LOCATION_SERVICE_NAME \
+            --env DB_LOCATION_SERVICE_USER_FILE=/run/secrets/DB_LOCATION_SERVICE_USER \
+            --env DB_LOCATION_SERVICE_PASS_FILE=/run/secrets/DB_LOCATION_SERVICE_PASS \
+            --with-registry-auth \
+            "$IMAGE_REF"; then
+            docker --context swarm service logs "$service_name" || true
+            exit 1
+          fi
+
+          docker --context swarm service logs "$service_name" || true
+
       - name: Update ${{ env.SERVICE_NAME }}
         run: |
           set -euo pipefail
