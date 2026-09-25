@@ -145,11 +145,11 @@ class City(ReferenceMixin, Base):
 
     @property
     def latitude(self) -> float:
-        return to_shape(self.coords).y  # y - широта
+        return to_shape(self.coords).y
 
     @property
     def longitude(self) -> float:
-        return to_shape(self.coords).x  # x - долгота
+        return to_shape(self.coords).x
 
     __table_args__ = (
         UniqueConstraint("name", "region_id", name="uq_city_name_region"),
@@ -231,8 +231,8 @@ class Location(Base):
 
     @property
     def latitude(self) -> float:
-        return to_shape(self.coords).y  # y - широта
+        return to_shape(self.coords).y
 
     @property
     def longitude(self) -> float:
-        return to_shape(self.coords).x  # x - долгота
+        return to_shape(self.coords).x

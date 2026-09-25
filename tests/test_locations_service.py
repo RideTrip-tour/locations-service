@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +33,7 @@ from app.schemas.admin import AdminLocationCreate
 from app.services.locations import LocationService
 
 from app.exceptions import CityNotFoundError
+from tests.fakes import make_location, make_location_execute_mock
 
 
 class FakeSession:
@@ -53,38 +55,6 @@ class FakeSession:
 
     async def refresh(self, obj, attribute_names=None):
         raise AssertionError("FakeSession.refresh should be monkeypatched")
-
-
-def make_location(**overrides):
-    country = overrides.pop("country", SimpleNamespace(name="Russia"))
-    region = overrides.pop(
-        "region", SimpleNamespace(name="Краснодарский край", country=country)
-    )
-    city_rel = overrides.pop(
-        "city_rel", SimpleNamespace(name="Сочи", region=region, country=country)
-    )
-    payload = {
-        "id": 1,
-        "slug": "rosa-khutor",
-        "name": "Роза Хутор",
-        "city_id": 1,
-        "city": "Сочи",
-        "region": "Краснодарский край",
-        "country": "Russia",
-        "city_rel": city_rel,
-        "description": None,
-        "latitude": 43.674,
-        "longitude": 40.206,
-        "distance_to_city_km": 70,
-        "activity_ids": [12],
-        "styles": ["mountain"],
-        "levels": ["beginner"],
-        "is_active": True,
-        "created_at": "2026-04-13T00:00:00Z",
-        "updated_at": "2026-04-13T00:00:00Z",
-    }
-    payload.update(overrides)
-    return SimpleNamespace(**payload)
 
 
 @pytest.mark.asyncio
@@ -501,19 +471,15 @@ def test_admin_create_location_links_styles_and_levels(monkeypatch):
     new_location.styles_rel = [LocationStyle(style_id=1)]
     new_location.levels_rel = [LocationLevel(level_id=2)]
 
-    async def fake_execute_create(statement):
-        compiled = str(statement.compile(dialect=postgresql.dialect()))
-        if "cities.id = %(" in compiled:
-            return SimpleNamespace(scalar_one_or_none=lambda: city)
-        if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [style]))
-        if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [level]))
-        if "locations.id IS NULL" in compiled:
-            return SimpleNamespace(scalar_one=lambda: new_location)
-        raise AssertionError(f"unexpected statement: {compiled}")
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=0,
+        styles=[style],
+        levels=[level],
+    )
 
-    monkeypatch.setattr(session, "execute", fake_execute_create)
+    monkeypatch.setattr(session, "execute", fake_execute)
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
@@ -548,17 +514,12 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
         city_id=1,
     )
 
-    async def fake_execute(statement):
-        compiled = str(statement.compile(dialect=postgresql.dialect()))
-        if "cities.id = %(" in compiled:
-            return SimpleNamespace(scalar_one_or_none=lambda: city)
-        if "styles" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-        if "levels" in compiled:
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
-        if "locations.id IS NULL" in compiled:
-            return SimpleNamespace(scalar_one=lambda: new_location)
-        raise AssertionError(f"unexpected statement: {compiled}")
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=0,
+    )
+    print(fake_execute)
 
     monkeypatch.setattr(session, "execute", fake_execute)
     monkeypatch.setattr(session, "add", lambda obj: None)
@@ -620,3 +581,42 @@ def test_admin_location_create_requires_city_id():
         )
 
     assert "city_id" in exc_info.value.errors()[0]["loc"]
+
+
+def test_admin_create_location_computes_distance(monkeypatch):
+    session = FakeSession()
+    location_in = SimpleNamespace(
+        model_dump=lambda exclude_unset: {
+            "name": "Роза Хутор",
+            "city_id": 1,
+            "latitude": 43.68,
+            "longitude": 40.29,
+            "activity_ids": [],
+            "styles": [],
+            "levels": [],
+        }
+    )
+
+    city = SimpleNamespace(id=1, region_id=1, region=SimpleNamespace(country_id=1))
+    new_location = Location(
+        id=8,
+        slug="rosa",
+        name="Роза Хутор",
+        city_id=1,
+        distance_to_city_km=Decimal("1681.346"),
+    )
+
+    fake_execute = make_location_execute_mock(
+        city=city,
+        new_location=new_location,
+        distance_m=1681346.123,
+    )
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+    monkeypatch.setattr(session, "add", lambda obj: None)
+    monkeypatch.setattr(session, "commit", session.commit)
+
+    result = asyncio.run(admin_create_location(session, location_in))
+
+    assert isinstance(result, Location)
+    assert result.distance_to_city_km == Decimal("1681.346")
