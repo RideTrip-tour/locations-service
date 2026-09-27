@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+from sqlalchemy.dialects import postgresql
+
 
 class FakeSession:
     """Minimal async session stub. Each method raises unless monkeypatched."""
@@ -272,3 +274,41 @@ def make_country(**overrides) -> DictLikeNamespace:
     payload = {"code": "RU", "name": "Россия", "name_en": "Russia", "gb_open": "RUS"}
     payload.update(overrides)
     return DictLikeNamespace(**payload)
+
+
+def make_location_execute_mock(
+    *,
+    city,
+    new_location,
+    distance_m=None,
+    styles=(),
+    levels=(),
+):
+    async def fake_execute(statement):
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+        if "ST_Distance" in compiled:
+            return SimpleNamespace(
+                scalar=lambda: 0,
+                scalars=lambda: SimpleNamespace(first=lambda: 0),
+            )
+
+        if "cities.id = %(" in compiled:
+            return SimpleNamespace(scalar_one_or_none=lambda: city)
+
+        if "styles" in compiled:
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: list(styles))
+            )
+
+        if "levels" in compiled:
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: list(levels))
+            )
+
+        if "locations.id IS NULL" in compiled:
+            return SimpleNamespace(scalar_one=lambda: new_location)
+
+        raise AssertionError(f"unexpected statement: {compiled}")
+
+    return fake_execute
