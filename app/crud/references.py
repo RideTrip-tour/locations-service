@@ -27,17 +27,17 @@ async def _paginate_and_search_reference(
     statement: Select,
     *,
     name: str | None = None,
-    id: int | list[int] | None = None,
+    item_id: int | list[int] | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Result, int]:
     """Pagination and filter by optional name and id, ordered by name for references."""
-    if id is not None:
-        if isinstance(id, list):
-            if id:
-                statement = statement.where(model.id.in_(id))
+    if item_id is not None:
+        if isinstance(item_id, list):
+            if item_id:
+                statement = statement.where(model.id.in_(item_id))
         else:
-            statement = statement.where(model.id == id)
+            statement = statement.where(model.id == item_id)
     if name:
         statement = statement.where(model.name.ilike(f"%{name.strip()}%"))
 
@@ -65,7 +65,7 @@ async def list_references(
         model=model,
         statement=statement,
         name=name,
-        id=id,
+        item_id=id,
         limit=limit,
         offset=offset,
     )
@@ -93,7 +93,7 @@ async def list_cities_with_coords(
         model=City,
         statement=statement,
         name=name,
-        id=id,
+        item_id=id,
         limit=limit,
         offset=offset,
     )
