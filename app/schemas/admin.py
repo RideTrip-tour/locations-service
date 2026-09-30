@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.locations import LocationBase
 from app.schemas.mixins import PaginationMixin
@@ -36,12 +36,36 @@ class AdminLocationListResponse(PaginationMixin, BaseModel):
     items: list[AdminLocationRead]
 
 
+class AdminLocationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    city_id: int | None = Field(default=None, ge=1)
+    description: str | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    activity_ids: list[int] | None = Field(default=None)
+    styles: list[str] | None = Field(default=None)
+    levels: list[str] | None = Field(default=None)
+    is_active: bool | None = Field(default=None)
+    slug: str | None = Field(default=None, min_length=1, max_length=150)
+
+    @model_validator(mode="after")
+    def check_coords_pair(self):
+        has_lat = self.latitude is not None
+        has_lon = self.longitude is not None
+        if has_lat != has_lon:
+            raise ValueError("latitude and longitude must be provided together")
+        return self
+
+
 class AdminReferenceCreate(ReferenceBase):
     pass
 
 
 class AdminRegionCreate(ReferenceBase):
     country_id: int
+    border: str
 
 
 class AdminCityCreate(ReferenceBase):

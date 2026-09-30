@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from app.crud.locations import (  # noqa E402
     admin_create_location,
+    admin_update_location as crud_admin_update_location,
     apply_location_filters,
     list_location_filter_options,
 )
@@ -25,11 +26,12 @@ from app.routes.query_params import (
     _parse_location_id,
     _split_query_values,
 )
+from app.routes.admin import router as admin_location_router
 from app.routes.locations import (
     read_locations,
     router,
 )
-from app.schemas.admin import AdminLocationCreate
+from app.schemas.admin import AdminLocationCreate, AdminLocationUpdate
 from app.services.locations import LocationService
 
 from app.exceptions import CityNotFoundError
@@ -539,29 +541,28 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
 async def test_admin_create_location_service_raises_404_when_city_missing(monkeypatch):
     session = FakeSession()
     service = LocationService(session)
-    location_in = SimpleNamespace(
+
+    location_in = AdminLocationCreate(
+        name="Тест",
         city_id=999,
+        latitude=43.6,
+        longitude=40.3,
         activity_ids=[],
         styles=[],
         levels=[],
     )
 
+    async def fake_ensure_relations(location_in):
+        return None
+
+    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
+
     async def fake_admin_create_location(db, location_in):
         raise CityNotFoundError(999)
 
-    async def fake_list_location_filter_options(db):
-        return {
-            "activity_ids": [],
-            "styles": [],
-            "levels": [],
-        }
-
     monkeypatch.setattr(
-        "app.services.locations.admin_create_location", fake_admin_create_location
-    )
-    monkeypatch.setattr(
-        "app.services.locations.list_location_filter_options",
-        fake_list_location_filter_options,
+        "app.services.locations.admin_create_location",
+        fake_admin_create_location,
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -581,6 +582,157 @@ def test_admin_location_create_requires_city_id():
         )
 
     assert "city_id" in exc_info.value.errors()[0]["loc"]
+
+
+def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
+    # Частичные данные — проходят
+    update = AdminLocationUpdate(name="Updated name")
+    assert update.model_dump(exclude_unset=True) == {"name": "Updated name"}
+
+    # latitude без longitude — падает
+    with pytest.raises(ValidationError):
+        AdminLocationUpdate(latitude=43.0)
+
+    # longitude без latitude — падает
+    with pytest.raises(ValidationError):
+        AdminLocationUpdate(longitude=40.0)
+
+    # оба — проходят
+    update = AdminLocationUpdate(latitude=43.0, longitude=40.0)
+    assert update.latitude == 43.0
+    assert update.longitude == 40.0
+
+
+def test_admin_location_update_openapi_exposes_patch_endpoint():
+    app = FastAPI()
+    app.include_router(admin_location_router)
+
+    operation = app.openapi()["paths"]["/api/admin/locations/{location_id}"]["patch"]
+    schema_ref = operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
+    update_schema = app.openapi()["components"]["schemas"][
+        schema_ref.rsplit("/", maxsplit=1)[-1]
+    ]
+
+    assert update_schema.get("required", []) == []
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("AdminLocationRead")
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_crud_updates_inactive_location(monkeypatch):
+    session = FakeSession()
+    location = make_location(name="Old name", is_active=False)
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        assert db is session
+        assert location_id == 17
+        assert only_active is False
+        return location
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalar_one=lambda: location)
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await crud_admin_update_location(
+        session, 17, AdminLocationUpdate(name="Updated name")
+    )
+
+    assert result is location
+    assert location.name == "Updated name"
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_refreshes_city_fields_after_city_change(
+    monkeypatch,
+):
+    session = FakeSession()
+    old_city = SimpleNamespace(name="Старый город")
+    new_city = SimpleNamespace(name="Боярка")
+    location = make_location(city_id=1, city_rel=old_city, coords="location-coords")
+    executed_statements = []
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        assert only_active is False
+        return location
+
+    async def fake_execute(statement):
+        executed_statements.append(statement)
+        if len(executed_statements) == 1:
+            return SimpleNamespace(scalar_one_or_none=lambda: new_city)
+        return SimpleNamespace(scalar_one=lambda: location)
+
+    async def fake_distance_to_city_km(db, *, location_coords, city_id):
+        assert location_coords == location.coords
+        assert city_id == 67
+        return Decimal("4.500")
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+    monkeypatch.setattr(
+        "app.crud.locations._get_distance_to_city_km", fake_distance_to_city_km
+    )
+
+    result = await crud_admin_update_location(
+        session, 8, AdminLocationUpdate(city_id=67)
+    )
+
+    assert result.city_rel.name == "Боярка"
+    assert result.city_id == 67
+    assert executed_statements[-1].get_execution_options()["populate_existing"] is True
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_service_returns_updated_location(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+    location = make_location(name="Updated name")
+    update = AdminLocationUpdate(name="Updated name")
+
+    async def fake_admin_update_location(db, location_id, location_in):
+        assert db is session
+        assert location_id == location.id
+        assert location_in is update
+        return location
+
+    monkeypatch.setattr(
+        "app.services.locations.admin_update_location", fake_admin_update_location
+    )
+
+    result = await service.admin_update_location(location.id, update)
+
+    assert result.id == location.id
+    assert result.name == "Updated name"
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_service_raises_404_when_location_missing(
+    monkeypatch,
+):
+    service = LocationService(FakeSession())
+
+    async def fake_admin_update_location(db, location_id, location_in):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.locations.admin_update_location", fake_admin_update_location
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.admin_update_location(999, AdminLocationUpdate(name="Updated"))
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Location not found"
 
 
 def test_admin_create_location_computes_distance(monkeypatch):
