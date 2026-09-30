@@ -32,13 +32,13 @@ async def _paginate_and_search_reference(
     offset: int = 0,
 ) -> tuple[Result, int]:
     """Pagination and filter by optional name and id, ordered by name for references."""
-    if item_id is not None:
+    if item_id:
         if isinstance(item_id, list):
             if item_id:
                 statement = statement.where(model.id.in_(item_id))
         else:
             statement = statement.where(model.id == item_id)
-    if name is not None:
+    if name:
         statement = statement.where(model.name.ilike(f"%{name.strip()}%"))
 
     total_statement = select(func.count()).select_from(statement.subquery())
