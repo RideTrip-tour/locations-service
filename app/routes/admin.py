@@ -77,7 +77,7 @@ async def create_location(
     return await service.admin_create_location(location_data)
 
 
-@router.patch("/{location_id}", response_model=AdminLocationRead)
+@router.patch("/{location_id}", status_code=status.HTTP_200_OK)
 async def update_location_by_id(
     location_id: LocationIdPath,
     service: LocationServiceDep,

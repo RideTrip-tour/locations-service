@@ -32,6 +32,8 @@ IntFilter = int | list[int]
 
 logger = logging.getLogger("location_service")
 
+LOCATION_NOT_FOUND = "Location not found"
+
 
 class LocationService:
     def __init__(self, session: AsyncSession):
@@ -112,7 +114,7 @@ class LocationService:
         if location is None:
             logger.warning("Location with id: %s not found", location_id)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Location not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
             )
         return location
 
@@ -210,7 +212,7 @@ class LocationService:
         if updated_location is None:
             logger.warning("Location with id %s not found for update", location_id)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Location not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
             )
         logger.info("Location with id %s was successfully updated", location_id)
         return AdminLocationRead.model_validate(updated_location)
@@ -220,7 +222,7 @@ class LocationService:
         if not deleted:
             logger.warning("Location with id %s is not found for deletion", location_id)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Location not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
             )
         logger.info("Location with id %s was successfully deleted", location_id)
 

@@ -585,19 +585,15 @@ def test_admin_location_create_requires_city_id():
 
 
 def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
-    # Частичные данные — проходят
     update = AdminLocationUpdate(name="Updated name")
     assert update.model_dump(exclude_unset=True) == {"name": "Updated name"}
 
-    # latitude без longitude — падает
     with pytest.raises(ValidationError):
         AdminLocationUpdate(latitude=43.0)
 
-    # longitude без latitude — падает
     with pytest.raises(ValidationError):
         AdminLocationUpdate(longitude=40.0)
 
-    # оба — проходят
     update = AdminLocationUpdate(latitude=43.0, longitude=40.0)
     assert update.latitude == 43.0
     assert update.longitude == 40.0
@@ -727,9 +723,10 @@ async def test_admin_update_location_service_raises_404_when_location_missing(
     monkeypatch.setattr(
         "app.services.locations.admin_update_location", fake_admin_update_location
     )
+    update = AdminLocationUpdate(name="Updated")
 
     with pytest.raises(HTTPException) as exc_info:
-        await service.admin_update_location(999, AdminLocationUpdate(name="Updated"))
+        await service.admin_update_location(999, update)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Location not found"
