@@ -38,7 +38,7 @@ async def _paginate_and_search_reference(
                 statement = statement.where(model.id.in_(item_id))
         else:
             statement = statement.where(model.id == item_id)
-    if name:
+    if name is not None:
         statement = statement.where(model.name.ilike(f"%{name.strip()}%"))
 
     total_statement = select(func.count()).select_from(statement.subquery())
@@ -54,7 +54,7 @@ async def list_references(
     model: type[ModelT],
     *,
     name: str | None = None,
-    id: int | list[int] | None = None,
+    item_id: int | list[int] | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Sequence[ModelT], int]:
@@ -65,7 +65,7 @@ async def list_references(
         model=model,
         statement=statement,
         name=name,
-        item_id=id,
+        item_id=item_id,
         limit=limit,
         offset=offset,
     )
@@ -76,7 +76,7 @@ async def list_cities_with_coords(
     session: AsyncSession,
     *,
     name: str | None = None,
-    id: int | list[int] | None = None,
+    item_id: int | list[int] | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[list, int]:
@@ -93,7 +93,7 @@ async def list_cities_with_coords(
         model=City,
         statement=statement,
         name=name,
-        item_id=id,
+        item_id=item_id,
         limit=limit,
         offset=offset,
     )

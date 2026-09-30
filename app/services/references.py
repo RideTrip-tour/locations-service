@@ -201,7 +201,7 @@ class ReferenceService:
             self.session,
             model=model,
             name=name,
-            id=item_id,
+            item_id=item_id,
             limit=limit,
             offset=offset,
         )
@@ -223,7 +223,7 @@ class ReferenceService:
         items, total = await list_cities_with_coords(
             self.session,
             name=name,
-            id=item_id,
+            item_id=item_id,
             limit=limit,
             offset=offset,
         )

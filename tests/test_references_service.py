@@ -121,7 +121,7 @@ def test_list_references_filters_by_single_id(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    items, total = asyncio.run(list_references(session, Style, id=5))
+    items, total = asyncio.run(list_references(session, Style, item_id=5))
 
     assert items == [style]
     assert total == 1
@@ -143,7 +143,7 @@ def test_list_references_filters_by_id_list(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    items, total = asyncio.run(list_references(session, Style, id=[1, 2]))
+    items, total = asyncio.run(list_references(session, Style, item_id=[1, 2]))
 
     assert items == styles
     assert total == 2
@@ -181,7 +181,7 @@ def test_list_references_combines_name_and_id(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    items, total = asyncio.run(list_references(session, Style, name="mou", id=1))
+    items, total = asyncio.run(list_references(session, Style, name="mou", item_id=1))
 
     assert items == [style]
     assert total == 1
@@ -200,7 +200,7 @@ def test_list_references_empty_id_list_returns_all(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    items, total = asyncio.run(list_references(session, Style, id=[]))
+    items, total = asyncio.run(list_references(session, Style, item_id=[]))
 
     assert items == [style]
     assert total == 1
@@ -221,7 +221,7 @@ def test_list_references_builds_where_for_name_and_id(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    asyncio.run(list_references(session, Style, name="mou", id=[1, 2]))
+    asyncio.run(list_references(session, Style, name="mou", item_id=[1, 2]))
 
     sql = captured["sql"]
     assert "styles.id IN" in sql
@@ -1612,7 +1612,7 @@ def test_list_countries_filters_by_name_and_id(monkeypatch):
         assert db is session
         assert model is Country
         assert kwargs["name"] == "рос"
-        assert kwargs["id"] == 1
+        assert kwargs["item_id"] == 1
         return [country], 1
 
     monkeypatch.setattr("app.services.references.list_references", fake_list_references)
@@ -1632,7 +1632,7 @@ def test_list_regions_filters_by_name_and_id(monkeypatch):
         assert db is session
         assert model is Region
         assert kwargs["name"] == "крас"
-        assert kwargs["id"] == 2
+        assert kwargs["item_id"] == 2
         return [region], 1
 
     monkeypatch.setattr("app.services.references.list_references", fake_list_references)
@@ -1652,7 +1652,7 @@ def test_list_cities_filters_by_name_and_id(monkeypatch):
         assert db is session
         assert model is City
         assert kwargs["name"] == "сочи"
-        assert kwargs["id"] == 3
+        assert kwargs["item_id"] == 3
         return [city], 1
 
     monkeypatch.setattr("app.services.references.list_references", fake_list_references)
@@ -1669,11 +1669,11 @@ def test_admin_cities_list_filters_by_name_and_id(monkeypatch):
     service = ReferenceService(session)
 
     async def fake_list_cities_with_coords(
-        db, *, name=None, id=None, limit=20, offset=0
+        db, *, name=None, item_id=None, limit=20, offset=0
     ):
         assert db is session
         assert name == "сочи"
-        assert id == 3
+        assert item_id == 3
         assert limit == 20
         assert offset == 0
         return [
