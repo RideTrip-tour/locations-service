@@ -6,6 +6,8 @@ from app.routes.query_params import (
     LocationIdPath,
     LocationServiceDep,
     OffsetQuery,
+    ReferenceIdQuery,
+    ReferenceNameQuery,
     ReferenceServiceDep,
     SearchQuery,
     StringListQuery,
@@ -13,6 +15,8 @@ from app.routes.query_params import (
 )
 from app.schemas.admin import (
     AdminCityCreate,
+    AdminCityListResponse,
+    AdminCityRead,
     AdminCityUpdate,
     AdminLocationCreate,
     AdminLocationListResponse,
@@ -128,6 +132,19 @@ async def read_level_locations(
     )
 
 
+@admin_references_router.get("/cities", response_model=AdminCityListResponse)
+async def read_cities(
+    service: ReferenceServiceDep,
+    name: ReferenceNameQuery = None,
+    id: ReferenceIdQuery = None,
+    limit: LimitQuery = 20,
+    offset: OffsetQuery = 0,
+):
+    return await service.admin_cities_list(
+        name=name, city_id=id, limit=limit, offset=offset
+    )
+
+
 @admin_references_router.post("/styles", status_code=status.HTTP_201_CREATED)
 async def create_style(
     service: ReferenceServiceDep, style_data: AdminReferenceCreate
@@ -162,7 +179,7 @@ async def create_regions(
 @admin_references_router.post("/cities", status_code=status.HTTP_201_CREATED)
 async def create_cities(
     service: ReferenceServiceDep, city_data: AdminCityCreate
-) -> ReferenceRead:
+) -> AdminCityRead:
     """Create a city linked to an existing region."""
     return await service.admin_create_city(
         name=city_data.name,
