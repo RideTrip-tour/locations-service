@@ -22,7 +22,7 @@ from app.db.models import (
     Style,
 )
 from app.exceptions import CityNotFoundError
-from app.schemas.admin import AdminLocationCreate
+from app.schemas.admin import AdminLocationCreate, AdminLocationUpdate
 from app.types import JunctionT
 from app.utils.geo import make_coords
 
@@ -190,6 +190,24 @@ async def _get_distance_to_city_km(
     return (Decimal(str(distance_m)) / Decimal(1000)).quantize(
         Decimal("0.001"), rounding=ROUND_HALF_UP
     )
+
+
+async def _get_existing_style_names(session: AsyncSession) -> set[str]:
+    result = await session.execute(select(Style.name))
+    return set(result.scalars().all())
+
+
+async def _get_existing_level_names(session: AsyncSession) -> set[str]:
+    result = await session.execute(select(Level.name))
+    return set(result.scalars().all())
+
+
+async def get_reference_options(session: AsyncSession) -> dict[str, set]:
+    """activity_ids пока не проверяется."""
+    return {
+        "styles": await _get_existing_style_names(session),
+        "levels": await _get_existing_level_names(session),
+    }
 
 
 def apply_location_filters(
@@ -361,6 +379,44 @@ async def list_location_filter_options(
     }
 
 
+async def _build_relations(
+    session: AsyncSession,
+    *,
+    activity_ids: list[int] | None,
+    styles: list[str] | None,
+    levels: list[str] | None,
+) -> tuple[list, list, list]:
+    activities_rel = None
+    styles_rel = None
+    levels_rel = None
+
+    if activity_ids is not None:
+        activities_rel = [
+            LocationActivity(activity_id=activity_id) for activity_id in activity_ids
+        ]
+    if styles is not None:
+        style_result = await session.execute(
+            select(Style).where(Style.name.in_(styles))
+        )
+        style_rows = style_result.scalars().all()
+        styles_rel = [LocationStyle(style_id=style.id) for style in style_rows]
+    if levels is not None:
+        level_result = await session.execute(
+            select(Level).where(Level.name.in_(levels))
+        )
+        level_rows = level_result.scalars().all()
+        levels_rel = [LocationLevel(level_id=level.id) for level in level_rows]
+    return activities_rel, styles_rel, levels_rel
+
+
+async def _ensure_city_exists(session: AsyncSession, city_id: int) -> City:
+    city = await session.execute(select(City).where(City.id == city_id))
+    result = city.scalar_one_or_none()
+    if result is None:
+        raise CityNotFoundError(city_id)
+    return result
+
+
 async def admin_create_location(
     session: AsyncSession, locations_in: AdminLocationCreate
 ) -> Location:
@@ -374,9 +430,7 @@ async def admin_create_location(
     longitude = location_data.pop("longitude")
     location_coords = make_coords(latitude, longitude)
 
-    city = await session.execute(select(City).where(City.id == city_id))
-    if city.scalar_one_or_none() is None:
-        raise CityNotFoundError(city_id)
+    await _ensure_city_exists(session, city_id)
 
     new_location = Location(
         **location_data,
@@ -386,23 +440,80 @@ async def admin_create_location(
             session, location_coords=location_coords, city_id=city_id
         ),
     )
-    new_location.activities_rel = [
-        LocationActivity(activity_id=activity_id) for activity_id in activity_ids
-    ]
-    style_rows = await session.execute(select(Style).where(Style.name.in_(styles)))
-    style_rows = style_rows.scalars().all()
-    new_location.styles_rel = [LocationStyle(style_id=style.id) for style in style_rows]
-    level_rows = await session.execute(select(Level).where(Level.name.in_(levels)))
-    level_rows = level_rows.scalars().all()
-    new_location.levels_rel = [LocationLevel(level_id=level.id) for level in level_rows]
-    session.add(new_location)
+    activities_rel, styles_rel, levels_rel = await _build_relations(
+        session, activity_ids=activity_ids, styles=styles, levels=levels
+    )
+    new_location.activities_rel = activities_rel or []
+    new_location.styles_rel = styles_rel or []
+    new_location.levels_rel = levels_rel or []
 
+    session.add(new_location)
     await session.commit()
 
     result = await session.execute(
         select(Location)
         .options(*_load_location_options())
         .where(Location.id == new_location.id)
+    )
+    return result.scalar_one()
+
+
+async def admin_update_location(
+    session: AsyncSession,
+    location_id: int,
+    location_in: AdminLocationUpdate,
+) -> Location | None:
+    location = await get_location_by_id(session, location_id, only_active=False)
+    if location is None:
+        return None
+
+    fields = location_in.model_dump(exclude_unset=True)
+    activity_ids = fields.pop("activity_ids", None)
+    styles = fields.pop("styles", None)
+    levels = fields.pop("levels", None)
+    city_id = fields.pop("city_id", None)
+    latitude = fields.pop("latitude", None)
+    longitude = fields.pop("longitude", None)
+
+    if city_id is not None:
+        city = await _ensure_city_exists(session, city_id)
+        location.city_id = city_id
+        location.city_rel = city
+
+    new_coords = latitude is not None and longitude is not None
+    if new_coords:
+        location.coords = make_coords(latitude, longitude)
+    if city_id is not None or new_coords:
+        distance = await _get_distance_to_city_km(
+            session,
+            location_coords=location.coords,
+            city_id=location.city_id,
+        )
+        if distance is not None:
+            location.distance_to_city_km = distance
+
+    for field, value in fields.items():
+        setattr(location, field, value)
+
+    activities_rel, styles_rel, levels_rel = await _build_relations(
+        session, activity_ids=activity_ids, styles=styles, levels=levels
+    )
+    if activity_ids is not None:
+        location.activities_rel = activities_rel
+    if styles is not None:
+        location.styles_rel = styles_rel
+    if levels is not None:
+        location.levels_rel = levels_rel
+
+    if not location_in.model_fields_set:
+        return location
+
+    await session.commit()
+    result = await session.execute(
+        select(Location)
+        .options(*_load_location_options())
+        .where(Location.id == location_id)
+        .execution_options(populate_existing=True)
     )
     return result.scalar_one()
 

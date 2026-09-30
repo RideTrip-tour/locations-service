@@ -8,13 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud.locations import (
     admin_create_location,
     admin_delete_location_by_id,
+    admin_update_location,
     get_location_by_id,
+    get_reference_options,
     list_location_filter_options,
     list_locations,
 )
 from app.db.database import get_async_session
 from app.exceptions import CityNotFoundError
-from app.schemas.admin import AdminLocationCreate, AdminLocationRead
+from app.schemas.admin import (
+    AdminLocationCreate,
+    AdminLocationRead,
+    AdminLocationUpdate,
+)
 from app.schemas.locations import (
     LocationFilterOptions,
     LocationListResponse,
@@ -25,6 +31,8 @@ StrFilter = str | list[str]
 IntFilter = int | list[int]
 
 logger = logging.getLogger("location_service")
+
+LOCATION_NOT_FOUND = "Location not found"
 
 
 class LocationService:
@@ -106,7 +114,7 @@ class LocationService:
         if location is None:
             logger.warning("Location with id: %s not found", location_id)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Location not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
             )
         return location
 
@@ -142,21 +150,25 @@ class LocationService:
         )
 
     @staticmethod
-    def _missing_values(requested: list, existing: list[str] | list[int]) -> list:
+    def _missing_values(requested: list, existing: set[str] | set[int]) -> list:
         """Return values that are not present among the existing ones."""
         return [value for value in requested if value not in existing]
 
-    async def _ensure_relations_exist(self, location_in: AdminLocationCreate) -> None:
+    async def _ensure_relations_exist(
+        self, location_in: AdminLocationCreate | AdminLocationUpdate
+    ) -> None:
         """Raise 422 if any requested activity, style or level is not yet in the DB."""
-        options = await list_location_filter_options(self.session)
+        relation_fields = {"styles", "levels"} & location_in.model_fields_set
+        if not relation_fields:
+            return
+        options = await get_reference_options(self.session)
+
         missing = {
-            "activity_ids": self._missing_values(
-                location_in.activity_ids, options["activity_ids"]
-            ),
-            "styles": self._missing_values(location_in.styles, options["styles"]),
-            "levels": self._missing_values(location_in.levels, options["levels"]),
+            field: self._missing_values(getattr(location_in, field), options[field])
+            for field in relation_fields
         }
-        if any(missing.values()):
+        missing = {field: values for field, values in missing.items() if values}
+        if missing:
             logger.warning("Creation is failed, missing relations: %s", missing)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=missing
@@ -178,14 +190,39 @@ class LocationService:
                 detail=f"City with id {e.city_id} not found.",
             ) from e
         logger.info("Location with id %s was successfully created", location.id)
-        return location
+        return AdminLocationRead.model_validate(location)
+
+    async def admin_update_location(
+        self, location_id: int, location_in: AdminLocationUpdate
+    ) -> AdminLocationRead:
+        await self._ensure_relations_exist(location_in)
+        try:
+            updated_location = await admin_update_location(
+                self.session, location_id, location_in
+            )
+        except CityNotFoundError as e:
+            logger.warning(
+                "Location update failed, city with id: %s not found", e.city_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"City with id {e.city_id} not found.",
+            ) from e
+
+        if updated_location is None:
+            logger.warning("Location with id %s not found for update", location_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
+            )
+        logger.info("Location with id %s was successfully updated", location_id)
+        return AdminLocationRead.model_validate(updated_location)
 
     async def admin_delete_location(self, location_id: int) -> None:
         deleted = await admin_delete_location_by_id(self.session, location_id)
         if not deleted:
             logger.warning("Location with id %s is not found for deletion", location_id)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Location not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
             )
         logger.info("Location with id %s was successfully deleted", location_id)
 
