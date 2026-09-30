@@ -651,7 +651,7 @@ async def test_admin_create_region_raises_400_on_duplicate(monkeypatch):
 def test_admin_create_city_linked_to_region(monkeypatch):
     session = FakeSession()
     service = ReferenceService(session)
-    city = make_reference(City, id=1, name="Сочи")
+    city = make_reference(City, id=1, name="Сочи", latitude=43.5855, longitude=39.7231)
 
     async def fake_get_reference_by_id(db, model, item_id):
         assert db is session
@@ -664,6 +664,9 @@ def test_admin_create_city_linked_to_region(monkeypatch):
         assert model is City
         assert name == "Сочи"
         assert kwargs["region_id"] == 1
+        assert "coords" in kwargs
+        coords = kwargs["coords"]
+        assert coords.srid == 4326
         return city
 
     monkeypatch.setattr(
@@ -1658,6 +1661,47 @@ def test_list_cities_filters_by_name_and_id(monkeypatch):
 
     assert result.total == 1
     assert result.items[0].name == "Сочи"
+
+
+def test_admin_cities_list_filters_by_name_and_id(monkeypatch):
+    """Админская ручка отдаёт города с координатами."""
+    session = FakeSession()
+    service = ReferenceService(session)
+
+    async def fake_list_cities_with_coords(
+        db, *, name=None, id=None, limit=20, offset=0
+    ):
+        assert db is session
+        assert name == "сочи"
+        assert id == 3
+        assert limit == 20
+        assert offset == 0
+        return [
+            {
+                "id": 3,
+                "name": "Сочи",
+                "latitude": 43.5855,
+                "longitude": 39.7231,
+            },
+        ], 1
+
+    monkeypatch.setattr(
+        "app.services.references.list_cities_with_coords",
+        fake_list_cities_with_coords,
+    )
+
+    result = asyncio.run(service.admin_cities_list(name="сочи", city_id=3))
+
+    assert result.total == 1
+    assert result.limit == 20
+    assert result.offset == 0
+    assert len(result.items) == 1
+
+    city = result.items[0]
+    assert city.id == 3
+    assert city.name == "Сочи"
+    assert city.latitude == 43.5855
+    assert city.longitude == 39.7231
 
 
 def test_list_countries_returns_reference_list_response(monkeypatch):

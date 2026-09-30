@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.locations import LocationBase
 from app.schemas.mixins import PaginationMixin
-from app.schemas.references import ReferenceBase
+from app.schemas.references import ReferenceBase, ReferenceRead
 
 
 class AdminLocationBase(LocationBase):
@@ -58,3 +58,12 @@ class AdminCityUpdate(ReferenceBase):
     region_id: int | None = None
     latitude: float | None = None
     longitude: float | None = None
+
+
+class AdminCityRead(ReferenceRead):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class AdminCityListResponse(PaginationMixin):
+    items: list[AdminCityRead]

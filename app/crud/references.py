@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from geoalchemy2 import Geometry
+from geoalchemy2.functions import ST_X, ST_Y
+from sqlalchemy import Result, Select, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,17 +21,17 @@ async def get_reference_by_id(
     return result.scalar_one_or_none()
 
 
-async def list_references(
+async def _paginate_and_search_reference(
     session: AsyncSession,
     model: type[ModelT],
+    statement: Select,
     *,
     name: str | None = None,
     id: int | list[int] | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> tuple[Sequence[ModelT], int]:
-    """Return a paginated list of reference rows filtered by optional name and id, ordered by name."""
-    statement = select(model)
+) -> tuple[Result, int]:
+    """Pagination and filter by optional name and id, ordered by name for references."""
     if id is not None:
         if isinstance(id, list):
             if id:
@@ -44,7 +46,59 @@ async def list_references(
 
     statement = statement.order_by(model.name).limit(limit).offset(offset)
     result = await session.execute(statement)
+    return result, int(total or 0)
+
+
+async def list_references(
+    session: AsyncSession,
+    model: type[ModelT],
+    *,
+    name: str | None = None,
+    id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[ModelT], int]:
+    """Return a paginated list of reference rows."""
+    statement = select(model)
+    result, total = await _paginate_and_search_reference(
+        session=session,
+        model=model,
+        statement=statement,
+        name=name,
+        id=id,
+        limit=limit,
+        offset=offset,
+    )
     return result.scalars().all(), int(total or 0)
+
+
+async def list_cities_with_coords(
+    session: AsyncSession,
+    *,
+    name: str | None = None,
+    id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list, int]:
+    """Return a paginated list of cities with coordinates for admin."""
+    statement = select(
+        City.id,
+        City.name,
+        ST_Y(cast(City.coords, Geometry)).label("latitude"),
+        ST_X(cast(City.coords, Geometry)).label("longitude"),
+    )
+
+    result, total = await _paginate_and_search_reference(
+        session=session,
+        model=City,
+        statement=statement,
+        name=name,
+        id=id,
+        limit=limit,
+        offset=offset,
+    )
+
+    return [row._mapping for row in result], int(total or 0)
 
 
 async def admin_create_reference(

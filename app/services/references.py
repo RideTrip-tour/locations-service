@@ -14,6 +14,7 @@ from app.crud.references import (
     get_city_names_by_country,
     get_city_names_by_region,
     get_reference_by_id,
+    list_cities_with_coords,
     list_locations_by_reference,
     list_references,
 )
@@ -27,6 +28,7 @@ from app.db.models import (
     Region,
     Style,
 )
+from app.schemas.admin import AdminCityListResponse, AdminCityRead
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
     ReferenceListResponse,
@@ -150,6 +152,18 @@ class ReferenceService:
             model=City, name=name, item_id=city_id, limit=limit, offset=offset
         )
 
+    async def admin_cities_list(
+        self,
+        *,
+        name: str | None = None,
+        city_id: int | list[int] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ):
+        return await self._list_cities_with_coords(
+            name=name, item_id=city_id, limit=limit, offset=offset
+        )
+
     async def list_regions(
         self,
         *,
@@ -198,6 +212,28 @@ class ReferenceService:
             offset=offset,
         )
 
+    async def _list_cities_with_coords(
+        self,
+        *,
+        name: str | None = None,
+        item_id: int | list[int] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> AdminCityListResponse:
+        items, total = await list_cities_with_coords(
+            self.session,
+            name=name,
+            id=item_id,
+            limit=limit,
+            offset=offset,
+        )
+        return AdminCityListResponse(
+            items=[AdminCityRead.model_validate(item) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
     async def admin_create_style(
         self,
         name: str,
@@ -232,7 +268,7 @@ class ReferenceService:
 
     async def admin_create_city(
         self, name: str, region_id: int, latitude: float, longitude: float
-    ) -> ReferenceRead:
+    ) -> AdminCityRead:
         """Create a city linked to a region."""
         try:
             item = await admin_create_reference(
@@ -251,7 +287,7 @@ class ReferenceService:
                 parent_id=region_id,
                 parent_model=Region,
             ) from exc
-        return ReferenceRead.model_validate(item)
+        return AdminCityRead.model_validate(item)
 
     async def _create_reference(self, model: type[ModelT], name: str) -> ReferenceRead:
         try:
