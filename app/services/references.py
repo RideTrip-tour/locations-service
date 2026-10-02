@@ -15,9 +15,9 @@ from app.crud.references import (
     get_city_names_by_region,
     get_reference_by_id,
     list_cities_with_coords,
+    list_cities_within_radius,
     list_locations_by_reference,
     list_references,
-    list_cities_within_radius
 )
 from app.db.database import get_async_session
 from app.db.models import (
@@ -32,10 +32,10 @@ from app.db.models import (
 from app.schemas.admin import AdminCityListResponse, AdminCityRead
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
+    CityWithinRadius,
     ReferenceListResponse,
     ReferenceLocationsResponse,
     ReferenceRead,
-    CityWithinRadius
 )
 from app.types import JunctionT, ModelT, ParentModelT
 from app.utils.geo import make_coords
@@ -176,7 +176,12 @@ class ReferenceService:
         offset: int = 0,
     ) -> CityWithinRadius:
         cities, total = await list_cities_within_radius(
-            self.session, latitude=latitude, longitude=longitude, radius=radius, limit=limit, offset=offset
+            self.session,
+            latitude=latitude,
+            longitude=longitude,
+            radius=radius,
+            limit=limit,
+            offset=offset,
         )
         return CityWithinRadius(
             total=total, limit=limit, offset=offset, radius=radius, items=cities

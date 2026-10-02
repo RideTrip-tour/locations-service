@@ -5,11 +5,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from geoalchemy2.elements import WKBElement
-from geoalchemy2.functions import ST_Distance, ST_DWithin
+from geoalchemy2.functions import ST_Distance
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
 
+from app.crud.common import filter_within_radius, load_location_options, paginate
 from app.db.models import (
     City,
     Country,
@@ -25,7 +25,6 @@ from app.exceptions import CityNotFoundError
 from app.schemas.admin import AdminLocationCreate, AdminLocationUpdate
 from app.types import JunctionT
 from app.utils.geo import make_coords
-from app.crud.common import paginate, load_location_options, filter_within_radius
 
 StrFilter = str | Sequence[str]
 IntFilter = int | Sequence[int]
@@ -297,7 +296,11 @@ async def list_locations(
     )
 
     result, total = await paginate(
-        session=session, statement=base_statement, model=Location, limit=limit, offset=offset
+        session=session,
+        statement=base_statement,
+        model=Location,
+        limit=limit,
+        offset=offset,
     )
     return result.scalars().all(), int(total or 0)
 

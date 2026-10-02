@@ -6,12 +6,12 @@ from app.db.models import (
     City,
     Country,
     Level,
+    Location,
     LocationActivity,
     LocationLevel,
     LocationStyle,
     Region,
     Style,
-    Location
 )
 
 ModelT = TypeVar("ModelT", Style, Level, City, Region, Country, Location)

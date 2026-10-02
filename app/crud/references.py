@@ -4,15 +4,14 @@ from collections.abc import Sequence
 from typing import Any
 
 from geoalchemy2 import Geometry
-from geoalchemy2.functions import ST_X, ST_Y, ST_DWithin
+from geoalchemy2.functions import ST_X, ST_Y
 from sqlalchemy import Select, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.crud.common import filter_within_radius, load_location_options, paginate
 from app.db.models import City, Location, Region
-from app.crud.common import paginate, load_location_options, filter_within_radius
 from app.types import JunctionT, ModelT
-from app.utils.geo import make_coords
 
 
 async def get_reference_by_id(
@@ -52,7 +51,9 @@ async def list_references(
 ) -> tuple[Sequence[ModelT], int]:
     """Return a paginated list of reference rows."""
     statement = select(model)
-    statement = _apply_search_reference(model=model, statement=statement, name=name, item_id=item_id)
+    statement = _apply_search_reference(
+        model=model, statement=statement, name=name, item_id=item_id
+    )
     result, total = await paginate(
         session=session, statement=statement, model=model, limit=limit, offset=offset
     )
@@ -74,7 +75,9 @@ async def list_cities_with_coords(
         ST_Y(cast(City.coords, Geometry)).label("latitude"),
         ST_X(cast(City.coords, Geometry)).label("longitude"),
     )
-    statement = _apply_search_reference(model=City, statement=statement, name=name, item_id=item_id)
+    statement = _apply_search_reference(
+        model=City, statement=statement, name=name, item_id=item_id
+    )
 
     result, total = await paginate(
         session=session,
@@ -96,7 +99,9 @@ async def list_cities_within_radius(
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Sequence[City], int]:
-    statement = filter_within_radius(City, latitude=latitude, longitude=longitude, radius=radius)
+    statement = filter_within_radius(
+        City, latitude=latitude, longitude=longitude, radius=radius
+    )
     result, total = await paginate(
         session=session, statement=statement, model=City, limit=limit, offset=offset
     )

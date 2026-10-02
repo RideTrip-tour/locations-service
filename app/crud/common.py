@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
-
-from geoalchemy2 import Geometry
-from geoalchemy2.functions import ST_X, ST_Y, ST_DWithin
-from sqlalchemy import Result, Select, cast, func, select
-from sqlalchemy.exc import IntegrityError
+from geoalchemy2.functions import ST_DWithin
+from sqlalchemy import Result, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.models import City, Location, Region, LocationStyle, LocationLevel
-from app.types import JunctionT, ModelT, CoordT
-from app.utils.geo import make_coords
 from sqlalchemy.orm import joinedload, selectinload
+
+from app.db.models import City, Location, LocationLevel, LocationStyle, Region
+from app.types import CoordT, ModelT
+from app.utils.geo import make_coords
 
 
 async def paginate(
@@ -37,9 +32,7 @@ def filter_within_radius(
     radius: float,
 ) -> Select:
     user_coords = make_coords(latitude, longitude)
-    return select(model).where(
-        ST_DWithin(model.coords, user_coords, (radius * 1000))
-    )
+    return select(model).where(ST_DWithin(model.coords, user_coords, (radius * 1000)))
 
 
 def load_location_options():
