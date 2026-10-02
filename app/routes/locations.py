@@ -9,11 +9,15 @@ from app.routes.query_params import (
     SearchQuery,
     StringListQuery,
     _split_query_values,
+    LongitudeQuery,
+    LatitudeQuery,
+    RadiusQuery
 )
 from app.schemas.locations import (
     LocationFilterOptions,
     LocationListResponse,
     LocationRead,
+    LocationWithinRadius
 )
 
 router = APIRouter(prefix="/api/locations", tags=["locations"])
@@ -51,6 +55,19 @@ async def read_location_filters(
     service: LocationServiceDep,
 ):
     return await service.list_filter_options()
+
+
+@router.get("/radius", response_model=LocationWithinRadius)
+async def read_locations_within_radius(
+    service: LocationServiceDep,
+    latitude: LatitudeQuery,
+    longitude: LongitudeQuery,
+    radius: RadiusQuery,
+    limit: LimitQuery = 20,
+    offset: OffsetQuery = 0,
+):
+    """Returns a paginated list of locations within the given radius."""
+    return await service.list_locations_in_radius(latitude=latitude, longitude=longitude, radius=radius,  limit=limit, offset=offset)
 
 
 @router.get("/{location_id}", response_model=LocationRead)

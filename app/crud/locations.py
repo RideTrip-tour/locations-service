@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from geoalchemy2.elements import WKBElement
-from geoalchemy2.functions import ST_Distance
+from geoalchemy2.functions import ST_Distance, ST_DWithin
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -25,6 +25,7 @@ from app.exceptions import CityNotFoundError
 from app.schemas.admin import AdminLocationCreate, AdminLocationUpdate
 from app.types import JunctionT
 from app.utils.geo import make_coords
+from app.crud.common import paginate, load_location_options, filter_within_radius
 
 StrFilter = str | Sequence[str]
 IntFilter = int | Sequence[int]
@@ -158,18 +159,6 @@ def _add_geo_joins(
     return statement
 
 
-def _load_location_options():
-    """Load relationships for location."""
-    return (
-        selectinload(Location.activities_rel),
-        selectinload(Location.styles_rel).selectinload(LocationStyle.style),
-        selectinload(Location.levels_rel).selectinload(LocationLevel.level),
-        joinedload(Location.city_rel)
-        .joinedload(City.region)
-        .joinedload(Region.country),
-    )
-
-
 async def _get_distance_to_city_km(
     session: AsyncSession,
     *,
@@ -264,7 +253,7 @@ async def get_location_by_id(
 ) -> Location | None:
     statement = (
         select(Location)
-        .options(*_load_location_options())
+        .options(*load_location_options())
         .where(Location.id == location_id)
     )
     if only_active:
@@ -275,7 +264,7 @@ async def get_location_by_id(
 
 async def get_location_by_slug(session: AsyncSession, slug: str) -> Location | None:
     result = await session.execute(
-        select(Location).options(*_load_location_options()).where(Location.slug == slug)
+        select(Location).options(*load_location_options()).where(Location.slug == slug)
     )
     return result.scalar_one_or_none()
 
@@ -296,7 +285,7 @@ async def list_locations(
 ) -> tuple[Sequence[Location], int]:
     """Return a paginated filtered location list and the total matching count."""
     base_statement = apply_location_filters(
-        select(Location).options(*_load_location_options()),
+        select(Location).options(*load_location_options()),
         search=search,
         region=region,
         city=city,
@@ -307,11 +296,9 @@ async def list_locations(
         is_active=is_active,
     )
 
-    total_statement = select(func.count()).select_from(base_statement.subquery())
-    total = await session.scalar(total_statement)
-
-    statement = base_statement.order_by(Location.name).limit(limit).offset(offset)
-    result = await session.execute(statement)
+    result, total = await paginate(
+        session=session, statement=base_statement, model=Location, limit=limit, offset=offset
+    )
     return result.scalars().all(), int(total or 0)
 
 
@@ -377,6 +364,25 @@ async def list_location_filter_options(
             value for value in levels_result.scalars().all() if value is not None
         ],
     }
+
+
+async def list_locations_within_radius(
+    session: AsyncSession,
+    *,
+    latitude: float,
+    longitude: float,
+    radius: float,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[Location], int]:
+    statement = filter_within_radius(
+        Location, latitude=latitude, longitude=longitude, radius=radius
+    ).options(*load_location_options())
+
+    result, total = await paginate(
+        session=session, statement=statement, model=Location, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
 
 
 async def _build_relations(
@@ -452,7 +458,7 @@ async def admin_create_location(
 
     result = await session.execute(
         select(Location)
-        .options(*_load_location_options())
+        .options(*load_location_options())
         .where(Location.id == new_location.id)
     )
     return result.scalar_one()
@@ -511,7 +517,7 @@ async def admin_update_location(
     await session.commit()
     result = await session.execute(
         select(Location)
-        .options(*_load_location_options())
+        .options(*load_location_options())
         .where(Location.id == location_id)
         .execution_options(populate_existing=True)
     )

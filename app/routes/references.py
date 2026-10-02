@@ -6,8 +6,11 @@ from app.routes.query_params import (
     ReferenceIdQuery,
     ReferenceNameQuery,
     ReferenceServiceDep,
+    LongitudeQuery,
+    LatitudeQuery,
+    RadiusQuery
 )
-from app.schemas.references import ReferenceListResponse
+from app.schemas.references import ReferenceListResponse, CityWithinRadius
 
 router = APIRouter(prefix="/api/locations/references", tags=["references"])
 
@@ -43,6 +46,19 @@ async def read_cities(
     offset: OffsetQuery = 0,
 ):
     return await service.list_cities(name=name, city_id=id, limit=limit, offset=offset)
+
+
+@router.get("/radius", response_model=CityWithinRadius)
+async def read_cities_within_radius(
+    service: ReferenceServiceDep,
+    latitude: LatitudeQuery,
+    longitude: LongitudeQuery,
+    radius: RadiusQuery,
+    limit: LimitQuery = 20,
+    offset: OffsetQuery = 0,
+):
+    """Returns a paginated list of cities within the given radius."""
+    return await service.list_cities_in_radius(latitude=latitude, longitude=longitude, radius=radius, limit=limit, offset=offset)
 
 
 @router.get("/regions", response_model=ReferenceListResponse)

@@ -48,3 +48,10 @@ class LocationFilterOptions(BaseModel):
     activity_ids: list[int] = Field(default_factory=list)
     styles: list[str] = Field(default_factory=list)
     levels: list[str] = Field(default_factory=list)
+
+
+class LocationWithinRadius(PaginationMixin, BaseModel):
+    radius: Decimal | None = Field(
+        default=None, ge=0, decimal_places=3, examples=["0.001"]
+    )
+    items: list[LocationRead]

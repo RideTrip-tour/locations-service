@@ -13,6 +13,7 @@ from app.crud.locations import (
     get_reference_options,
     list_location_filter_options,
     list_locations,
+    list_locations_within_radius
 )
 from app.db.database import get_async_session
 from app.exceptions import CityNotFoundError
@@ -25,6 +26,7 @@ from app.schemas.locations import (
     LocationFilterOptions,
     LocationListResponse,
     LocationRead,
+    LocationWithinRadius
 )
 
 StrFilter = str | list[str]
@@ -106,6 +108,22 @@ class LocationService:
     async def list_filter_options(self) -> LocationFilterOptions:
         options = await list_location_filter_options(self.session)
         return LocationFilterOptions(**options)
+
+    async def list_locations_in_radius(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        radius: float,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> LocationWithinRadius:
+        locations, total = await list_locations_within_radius(
+            self.session, latitude=latitude, longitude=longitude, radius=radius,  limit=limit, offset=offset
+        )
+        return LocationWithinRadius(
+            total=total, limit=limit, offset=offset, radius=radius, items=locations
+        )
 
     async def _get_location(self, location_id: int, *, only_active: bool = True):
         location = await get_location_by_id(

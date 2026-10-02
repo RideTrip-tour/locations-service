@@ -17,6 +17,7 @@ from app.crud.references import (
     list_cities_with_coords,
     list_locations_by_reference,
     list_references,
+    list_cities_within_radius
 )
 from app.db.database import get_async_session
 from app.db.models import (
@@ -34,6 +35,7 @@ from app.schemas.references import (
     ReferenceListResponse,
     ReferenceLocationsResponse,
     ReferenceRead,
+    CityWithinRadius
 )
 from app.types import JunctionT, ModelT, ParentModelT
 from app.utils.geo import make_coords
@@ -162,6 +164,22 @@ class ReferenceService:
     ):
         return await self._list_cities_with_coords(
             name=name, item_id=city_id, limit=limit, offset=offset
+        )
+
+    async def list_cities_in_radius(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        radius: float,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> CityWithinRadius:
+        cities, total = await list_cities_within_radius(
+            self.session, latitude=latitude, longitude=longitude, radius=radius, limit=limit, offset=offset
+        )
+        return CityWithinRadius(
+            total=total, limit=limit, offset=offset, radius=radius, items=cities
         )
 
     async def list_regions(

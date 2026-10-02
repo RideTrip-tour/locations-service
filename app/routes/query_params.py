@@ -91,5 +91,8 @@ ReferenceIdQuery = Annotated[
 StringListQuery = Annotated[list[str] | None, Query()]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
+LatitudeQuery = Annotated[float, Query(ge=-90, le=90)]
+LongitudeQuery = Annotated[float, Query(ge=-180, le=180)]
+RadiusQuery = Annotated[float, Query(ge=0.001, description="In km.")]
 LocationServiceDep = Annotated[LocationService, Depends(get_location_service)]
 ReferenceServiceDep = Annotated[ReferenceService, Depends(get_reference_service)]
