@@ -36,6 +36,7 @@ from app.services.locations import LocationService
 
 from app.exceptions import CityNotFoundError
 from tests.fakes import make_location, make_location_execute_mock
+from app.crud.common import filter_within_radius
 
 
 class FakeSession:
@@ -769,3 +770,16 @@ def test_admin_create_location_computes_distance(monkeypatch):
 
     assert isinstance(result, Location)
     assert result.distance_to_city_km == Decimal("1681.346")
+
+
+def test_filter_within_radius_works_for_location():
+    result = filter_within_radius(
+        model=Location,
+        latitude=54.79,
+        longitude=56.03,
+        radius=100,
+    )
+
+    compiled = str(result.compile(dialect=postgresql.dialect()))
+    assert "ST_DWithin" in compiled
+    assert "locations.coords" in compiled

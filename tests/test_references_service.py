@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
 
 from app.db.models import (
     City,
@@ -26,6 +27,7 @@ from asyncpg.exceptions import ForeignKeyViolationError as AsyncpgFKError
 from asyncpg.exceptions import UniqueViolationError as AsyncpgUniqueError
 from sqlalchemy.exc import IntegrityError
 
+from app.crud.common import filter_within_radius
 from app.crud.references import (
     admin_create_reference,
     admin_delete_reference,
@@ -1719,3 +1721,42 @@ def test_list_countries_returns_reference_list_response(monkeypatch):
     assert isinstance(result, ReferenceListResponse)
     assert result.total == 1
     assert result.items[0].name == "Россия"
+
+
+def test_filter_within_radius_adds_st_dwithin():
+    result = filter_within_radius(
+        model=City,
+        latitude=54.79,
+        longitude=56.03,
+        radius=2000,
+    )
+
+    compiled = str(result.compile(dialect=postgresql.dialect()))
+    assert "ST_DWithin" in compiled
+    assert "cities.coords" in compiled
+
+
+def test_filter_within_radius_converts_km_to_meters():
+    result = filter_within_radius(
+        model=City, latitude=54.79, longitude=56.03, radius=2000
+    )
+
+    compiled = str(
+        result.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "2000000" in compiled
+
+
+def test_filter_within_radius_accepts_float_km():
+    result = filter_within_radius(
+        model=City, latitude=54.79, longitude=56.03, radius=1.5
+    )
+
+    compiled = str(
+        result.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "1500" in compiled
