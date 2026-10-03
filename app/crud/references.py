@@ -5,11 +5,11 @@ from typing import Any
 
 from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_X, ST_Y
-from sqlalchemy import Result, Select, cast, func, select
+from sqlalchemy import Select, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.locations import _load_location_options
+from app.crud.common import filter_within_radius, load_location_options, paginate
 from app.db.models import City, Location, Region
 from app.types import JunctionT, ModelT
 
@@ -21,17 +21,14 @@ async def get_reference_by_id(
     return result.scalar_one_or_none()
 
 
-async def _paginate_and_search_reference(
-    session: AsyncSession,
+def _apply_search_reference(
     model: type[ModelT],
-    statement: Select,
+    statement: Select[tuple[ModelT]],
     *,
     name: str | None = None,
     item_id: int | list[int] | None = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> tuple[Result, int]:
-    """Pagination and filter by optional name and id, ordered by name for references."""
+) -> Select[tuple[ModelT]]:
+    """Filter by optional name and id, ordered by name for references."""
     if item_id:
         if isinstance(item_id, list):
             if item_id:
@@ -40,13 +37,7 @@ async def _paginate_and_search_reference(
             statement = statement.where(model.id == item_id)
     if name:
         statement = statement.where(model.name.ilike(f"%{name.strip()}%"))
-
-    total_statement = select(func.count()).select_from(statement.subquery())
-    total = await session.scalar(total_statement)
-
-    statement = statement.order_by(model.name).limit(limit).offset(offset)
-    result = await session.execute(statement)
-    return result, int(total or 0)
+    return statement
 
 
 async def list_references(
@@ -60,14 +51,11 @@ async def list_references(
 ) -> tuple[Sequence[ModelT], int]:
     """Return a paginated list of reference rows."""
     statement = select(model)
-    result, total = await _paginate_and_search_reference(
-        session=session,
-        model=model,
-        statement=statement,
-        name=name,
-        item_id=item_id,
-        limit=limit,
-        offset=offset,
+    statement = _apply_search_reference(
+        model=model, statement=statement, name=name, item_id=item_id
+    )
+    result, total = await paginate(
+        session=session, statement=statement, model=model, limit=limit, offset=offset
     )
     return result.scalars().all(), int(total or 0)
 
@@ -87,18 +75,37 @@ async def list_cities_with_coords(
         ST_Y(cast(City.coords, Geometry)).label("latitude"),
         ST_X(cast(City.coords, Geometry)).label("longitude"),
     )
+    statement = _apply_search_reference(
+        model=City, statement=statement, name=name, item_id=item_id
+    )
 
-    result, total = await _paginate_and_search_reference(
+    result, total = await paginate(
         session=session,
         model=City,
         statement=statement,
-        name=name,
-        item_id=item_id,
         limit=limit,
         offset=offset,
     )
 
     return [row._mapping for row in result], int(total or 0)
+
+
+async def list_cities_within_radius(
+    session: AsyncSession,
+    *,
+    latitude: float,
+    longitude: float,
+    radius: float,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[City], int]:
+    statement = filter_within_radius(
+        City, latitude=latitude, longitude=longitude, radius=radius
+    )
+    result, total = await paginate(
+        session=session, statement=statement, model=City, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
 
 
 async def admin_create_reference(
@@ -190,7 +197,7 @@ async def list_locations_by_reference(
 
     base_statement = (
         select(Location)
-        .options(*_load_location_options())
+        .options(*load_location_options())
         .join(junction_model, junction_model.location_id == Location.id)
         .where(reference_field == item_id)
     )

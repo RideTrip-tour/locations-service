@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.locations import LocationRead
@@ -22,3 +24,10 @@ class ReferenceListResponse(PaginationMixin, BaseModel):
 
 class ReferenceLocationsResponse(PaginationMixin, ReferenceRead):
     locations: list[LocationRead]
+
+
+class CityWithinRadius(PaginationMixin, BaseModel):
+    radius: Decimal | None = Field(
+        default=None, ge=0, decimal_places=3, examples=["0.001"]
+    )
+    items: list[ReferenceRead]

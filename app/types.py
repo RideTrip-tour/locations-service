@@ -6,6 +6,7 @@ from app.db.models import (
     City,
     Country,
     Level,
+    Location,
     LocationActivity,
     LocationLevel,
     LocationStyle,
@@ -13,6 +14,7 @@ from app.db.models import (
     Style,
 )
 
-ModelT = TypeVar("ModelT", Style, Level, City, Region, Country)
+ModelT = TypeVar("ModelT", Style, Level, City, Region, Country, Location)
 ParentModelT = TypeVar("ParentModelT", Region, Country)
 JunctionT = TypeVar("JunctionT", LocationLevel, LocationStyle, LocationActivity)
+CoordT = TypeVar("CoordT", City, Location)
