@@ -427,12 +427,14 @@ async def _ensure_city_exists(session: AsyncSession, city_id: int) -> City:
 
 
 async def admin_create_location(
-    session: AsyncSession, locations_in: AdminLocationCreate
+    session: AsyncSession, locations_in: AdminLocationCreate, *, slug: str
 ) -> Location:
     location_data = locations_in.model_dump(exclude_unset=True)
     activity_ids = location_data.pop("activity_ids", [])
     styles = location_data.pop("styles", [])
     levels = location_data.pop("levels", [])
+
+    location_data.pop("slug", None)
 
     city_id = location_data.pop("city_id")
     latitude = location_data.pop("latitude")
@@ -444,6 +446,7 @@ async def admin_create_location(
     new_location = Location(
         **location_data,
         city_id=city_id,
+        slug=slug,
         coords=location_coords,
         distance_to_city_km=await _get_distance_to_city_km(
             session, location_coords=location_coords, city_id=city_id
