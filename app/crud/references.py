@@ -108,6 +108,50 @@ async def list_cities_within_radius(
     return result.scalars().all(), int(total or 0)
 
 
+async def list_cities(
+    session: AsyncSession,
+    *,
+    region_id: int | None = None,
+    name: str | None = None,
+    item_id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[City], int]:
+    """Return a paginated list of cities with optional filter by region_id."""
+    statement = select(City)
+    if region_id is not None:
+        statement = statement.where(City.region_id == region_id)
+    statement = _apply_search_reference(
+        model=City, statement=statement, name=name, item_id=item_id
+    )
+    result, total = await paginate(
+        session=session, statement=statement, model=City, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
+
+
+async def list_regions(
+    session: AsyncSession,
+    *,
+    country_id: int | None = None,
+    name: str | None = None,
+    item_id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[Region], int]:
+    """Return a paginated list of regions with optional filter by country_id."""
+    statement = select(Region)
+    if country_id is not None:
+        statement = statement.where(Region.country_id == country_id)
+    statement = _apply_search_reference(
+        model=Region, statement=statement, name=name, item_id=item_id
+    )
+    result, total = await paginate(
+        session=session, statement=statement, model=Region, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
+
+
 async def admin_create_reference(
     session: AsyncSession,
     model: type[ModelT],

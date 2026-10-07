@@ -18,6 +18,8 @@ from app.crud.references import (
     list_cities_within_radius,
     list_locations_by_reference,
     list_references,
+    list_regions as crud_list_regions,
+    list_cities as crud_list_cities
 )
 from app.db.database import get_async_session
 from app.db.models import (
@@ -145,13 +147,25 @@ class ReferenceService:
     async def list_cities(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         city_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
     ):
-        return await self._list_references(
-            model=City, name=name, item_id=city_id, limit=limit, offset=offset
+        items, total = await crud_list_cities(
+            self.session,
+            region_id=region_id,
+            name=name,
+            item_id=city_id,
+            limit=limit,
+            offset=offset
+        )
+        return ReferenceListResponse(
+            items=[ReferenceRead.model_validate(item) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     async def admin_cities_list(
@@ -190,13 +204,25 @@ class ReferenceService:
     async def list_regions(
         self,
         *,
+        country_id: int | None = None,
         name: str | None = None,
         region_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
-    ):
-        return await self._list_references(
-            model=Region, name=name, item_id=region_id, limit=limit, offset=offset
+    ) -> ReferenceListResponse:
+        items, total = await crud_list_regions(
+            self.session,
+            country_id=country_id,
+            name=name,
+            item_id=region_id,
+            limit=limit,
+            offset=offset
+        )
+        return ReferenceListResponse(
+            items=[ReferenceRead.model_validate(item) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     async def list_countries(
