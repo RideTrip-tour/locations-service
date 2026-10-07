@@ -4,6 +4,7 @@ import logging
 
 from fastapi import Depends, HTTPException, status
 from slugify import slugify
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.locations import (
@@ -11,13 +12,13 @@ from app.crud.locations import (
     admin_delete_location_by_id,
     admin_update_location,
     get_location_by_id,
-    get_location_by_slug,
     get_reference_options,
     list_location_filter_options,
     list_locations,
     list_locations_within_radius,
 )
 from app.db.database import get_async_session
+from app.db.models import Location
 from app.exceptions import CityNotFoundError
 from app.schemas.admin import (
     AdminLocationCreate,
@@ -30,6 +31,7 @@ from app.schemas.locations import (
     LocationRead,
     LocationWithinRadius,
 )
+from app.services.common import integrity_error_to_http
 
 StrFilter = str | list[str]
 IntFilter = int | list[int]
@@ -202,24 +204,26 @@ class LocationService:
     async def admin_create_location(
         self, location_in: AdminLocationCreate
     ) -> AdminLocationRead:
-        await self._ensure_relations_exist(location_in)
         slug = location_in.slug or slugify(location_in.name)
-        existing_slug = await get_location_by_slug(self.session, slug)
-        if existing_slug is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Slug {slug} already exists",
-            )
         try:
             location = await admin_create_location(self.session, location_in, slug=slug)
-        except CityNotFoundError as e:
+        except CityNotFoundError as exc:
             logger.warning(
-                "Location creation failed, city with id: %s not found", e.city_id
+                "Location creation failed, city with id: %s not found", exc.city_id
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"City with id {e.city_id} not found.",
-            ) from e
+                detail=f"City with id {exc.city_id} not found.",
+            ) from exc
+        except IntegrityError as exc:
+            raise integrity_error_to_http(
+                exc,
+                action="creation",
+                item_name=slug,
+                base_model=Location,
+                unique_status=status.HTTP_409_CONFLICT,
+                unique_detail=f"Slug '{slug}' already exists",
+            ) from exc
         logger.info("Location with id %s was successfully created", location.id)
         return AdminLocationRead.model_validate(location)
 
