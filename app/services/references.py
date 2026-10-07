@@ -18,9 +18,9 @@ from app.crud.references import (
     list_cities_within_radius,
     list_locations_by_reference,
     list_references,
-    list_regions as crud_list_regions,
-    list_cities as crud_list_cities
 )
+from app.crud.references import list_cities as crud_list_cities
+from app.crud.references import list_regions as crud_list_regions
 from app.db.database import get_async_session
 from app.db.models import (
     City,
@@ -159,7 +159,7 @@ class ReferenceService:
             name=name,
             item_id=city_id,
             limit=limit,
-            offset=offset
+            offset=offset,
         )
         return ReferenceListResponse(
             items=[ReferenceRead.model_validate(item) for item in items],
@@ -219,7 +219,7 @@ class ReferenceService:
             name=name,
             item_id=region_id,
             limit=limit,
-            offset=offset
+            offset=offset,
         )
         return ReferenceListResponse(
             items=[ReferenceRead.model_validate(item) for item in items],

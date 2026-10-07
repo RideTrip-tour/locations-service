@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from slugify import slugify
 
 from fastapi import Depends, HTTPException, status
+from slugify import slugify
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.locations import (
@@ -11,11 +11,11 @@ from app.crud.locations import (
     admin_delete_location_by_id,
     admin_update_location,
     get_location_by_id,
+    get_location_by_slug,
     get_reference_options,
     list_location_filter_options,
     list_locations,
     list_locations_within_radius,
-    get_location_by_slug
 )
 from app.db.database import get_async_session
 from app.exceptions import CityNotFoundError
@@ -208,7 +208,7 @@ class LocationService:
         if existing_slug is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Slug {slug} already exists"
+                detail=f"Slug {slug} already exists",
             )
         try:
             location = await admin_create_location(self.session, location_in, slug=slug)

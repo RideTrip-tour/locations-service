@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from geoalchemy2.functions import ST_DWithin
 from geoalchemy2 import WKBElement
-from sqlalchemy.orm.attributes import InstrumentedAttribute
+from geoalchemy2.functions import ST_DWithin
 from sqlalchemy import Result, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from app.db.models import City, Location, LocationLevel, LocationStyle, Region
-from app.types import CoordT, ModelT
+from app.types import ModelT
 from app.utils.geo import make_coords
 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, status
 
 from app.routes.query_params import (
     ActivityIdQuery,
+    FKIdQuery,
     LimitQuery,
     LocationIdPath,
     LocationServiceDep,
@@ -12,7 +13,6 @@ from app.routes.query_params import (
     SearchQuery,
     StringListQuery,
     _split_query_values,
-    FKIdQuery
 )
 from app.schemas.admin import (
     AdminCityCreate,

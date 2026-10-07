@@ -857,7 +857,7 @@ def test_admin_create_location_computes_distance(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in,  slug="test-slug"))
+    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
 
     assert isinstance(result, Location)
     assert result.distance_to_city_km == Decimal("1681.346")

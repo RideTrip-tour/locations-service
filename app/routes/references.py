@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.routes.query_params import (
+    FKIdQuery,
     LatitudeQuery,
     LimitQuery,
     LongitudeQuery,
@@ -9,7 +10,6 @@ from app.routes.query_params import (
     ReferenceIdQuery,
     ReferenceNameQuery,
     ReferenceServiceDep,
-    FKIdQuery
 )
 from app.schemas.references import CityWithinRadius, ReferenceListResponse
 
@@ -47,7 +47,9 @@ async def read_cities(
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
-    return await service.list_cities(region_id=region_id, name=name, city_id=id, limit=limit, offset=offset)
+    return await service.list_cities(
+        region_id=region_id, name=name, city_id=id, limit=limit, offset=offset
+    )
 
 
 @router.get("/radius", response_model=CityWithinRadius)

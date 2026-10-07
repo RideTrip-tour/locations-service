@@ -1720,7 +1720,13 @@ def test_admin_cities_list_filters_by_region_id(monkeypatch):
     captured = {}
 
     async def fake_list_cities_with_coords(
-        db, *, region_id=None, name=None, item_id=None, limit=20, offset=0,
+        db,
+        *,
+        region_id=None,
+        name=None,
+        item_id=None,
+        limit=20,
+        offset=0,
     ):
         assert db is session
         captured["region_id"] = region_id
@@ -1768,9 +1774,7 @@ def test_list_cities_without_region_id(monkeypatch):
     service = ReferenceService(session)
     captured = {}
 
-    async def fake_list_cities(
-        db, *, region_id=None, **kwargs
-    ):
+    async def fake_list_cities(db, *, region_id=None, **kwargs):
         captured["region_id"] = region_id
         return [], 0
 
@@ -1830,9 +1834,7 @@ def test_list_regions_without_country_id(monkeypatch):
     service = ReferenceService(session)
     captured = {}
 
-    async def fake_list_regions(
-        db, *, country_id=None, **kwargs
-    ):
+    async def fake_list_regions(db, *, country_id=None, **kwargs):
         captured["country_id"] = country_id
         return [], 0
 
