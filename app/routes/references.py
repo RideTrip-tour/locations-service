@@ -56,11 +56,13 @@ async def read_cities_within_radius(
     latitude: LatitudeQuery,
     longitude: LongitudeQuery,
     radius: RadiusQuery,
+    region_id: FKIdQuery = None,
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
     """Returns a paginated list of cities within the given radius."""
     return await service.list_cities_in_radius(
+        region_id=region_id,
         latitude=latitude,
         longitude=longitude,
         radius=radius,

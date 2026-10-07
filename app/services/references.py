@@ -171,18 +171,20 @@ class ReferenceService:
     async def admin_cities_list(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         city_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
     ):
         return await self._list_cities_with_coords(
-            name=name, item_id=city_id, limit=limit, offset=offset
+            region_id=region_id, name=name, item_id=city_id, limit=limit, offset=offset
         )
 
     async def list_cities_in_radius(
         self,
         *,
+        region_id: int | None = None,
         latitude: float,
         longitude: float,
         radius: float,
@@ -191,6 +193,7 @@ class ReferenceService:
     ) -> CityWithinRadius:
         cities, total = await list_cities_within_radius(
             self.session,
+            region_id=region_id,
             latitude=latitude,
             longitude=longitude,
             radius=radius,
@@ -264,6 +267,7 @@ class ReferenceService:
     async def _list_cities_with_coords(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         item_id: int | list[int] | None = None,
         limit: int = 20,
@@ -271,6 +275,7 @@ class ReferenceService:
     ) -> AdminCityListResponse:
         items, total = await list_cities_with_coords(
             self.session,
+            region_id=region_id,
             name=name,
             item_id=item_id,
             limit=limit,

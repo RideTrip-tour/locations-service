@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from geoalchemy2.functions import ST_DWithin
+from geoalchemy2 import WKBElement
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy import Result, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -26,13 +28,14 @@ async def paginate(
 
 
 def filter_within_radius(
-    model: type[CoordT],
+    statement: Select,
+    coords_column: InstrumentedAttribute[WKBElement],
     latitude: float,
     longitude: float,
     radius: float,
 ) -> Select:
     user_coords = make_coords(latitude, longitude)
-    return select(model).where(ST_DWithin(model.coords, user_coords, (radius * 1000)))
+    return statement.where(ST_DWithin(coords_column, user_coords, (radius * 1000)))
 
 
 def load_location_options():

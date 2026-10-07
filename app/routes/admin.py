@@ -12,6 +12,7 @@ from app.routes.query_params import (
     SearchQuery,
     StringListQuery,
     _split_query_values,
+    FKIdQuery
 )
 from app.schemas.admin import (
     AdminCityCreate,
@@ -135,13 +136,14 @@ async def read_level_locations(
 @admin_references_router.get("/cities", response_model=AdminCityListResponse)
 async def read_cities(
     service: ReferenceServiceDep,
+    region_id: FKIdQuery = None,
     name: ReferenceNameQuery = None,
     id: ReferenceIdQuery = None,
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
     return await service.admin_cities_list(
-        name=name, city_id=id, limit=limit, offset=offset
+        region_id=region_id, name=name, city_id=id, limit=limit, offset=offset
     )
 
 

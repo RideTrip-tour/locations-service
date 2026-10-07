@@ -378,8 +378,9 @@ async def list_locations_within_radius(
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Sequence[Location], int]:
+    statement = select(Location)
     statement = filter_within_radius(
-        Location, latitude=latitude, longitude=longitude, radius=radius
+        statement, Location.coords, latitude, longitude, radius
     ).options(*load_location_options())
 
     result, total = await paginate(

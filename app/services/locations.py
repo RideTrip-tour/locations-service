@@ -204,7 +204,6 @@ class LocationService:
     ) -> AdminLocationRead:
         await self._ensure_relations_exist(location_in)
         slug = location_in.slug or slugify(location_in.name)
-        print(f"DEBUG slug: {slug!r}")
         existing_slug = await get_location_by_slug(self.session, slug)
         if existing_slug is not None:
             raise HTTPException(
