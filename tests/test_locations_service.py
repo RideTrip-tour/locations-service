@@ -593,10 +593,13 @@ def test_admin_location_create_requires_city_id():
     assert "city_id" in exc_info.value.errors()[0]["loc"]
 
 
-@pytest.mark.parametrize("input_slug, expected_slug", [
-    (None, "roza-khutor"),
-    ("custom-slug", "custom-slug"),
-])
+@pytest.mark.parametrize(
+    "input_slug, expected_slug",
+    [
+        (None, "roza-khutor"),
+        ("custom-slug", "custom-slug"),
+    ],
+)
 def test_admin_create_location_slug(monkeypatch, input_slug, expected_slug):
     session = FakeSession()
     service = LocationService(session)
