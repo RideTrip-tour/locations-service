@@ -593,12 +593,17 @@ def test_admin_location_create_requires_city_id():
     assert "city_id" in exc_info.value.errors()[0]["loc"]
 
 
-def test_admin_create_location_generates_slug_from_name(monkeypatch):
+@pytest.mark.parametrize("input_slug, expected_slug", [
+    (None, "roza-khutor"),
+    ("custom-slug", "custom-slug"),
+])
+def test_admin_create_location_slug(monkeypatch, input_slug, expected_slug):
     session = FakeSession()
     service = LocationService(session)
 
     location_in = AdminLocationCreate(
         name="Роза Хутор",
+        slug=input_slug,
         city_id=1,
         latitude=43.68,
         longitude=40.29,
@@ -631,49 +636,7 @@ def test_admin_create_location_generates_slug_from_name(monkeypatch):
 
     asyncio.run(service.admin_create_location(location_in))
 
-    assert captured["slug"] == "roza-khutor"
-
-
-def test_admin_create_location_provided_slug_not_overwritten(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    location_in = AdminLocationCreate(
-        name="Роза Хутор",
-        slug="custom-slug",
-        city_id=1,
-        latitude=43.68,
-        longitude=40.29,
-        activity_ids=[],
-        styles=[],
-        levels=[],
-    )
-
-    captured = {}
-
-    async def fake_ensure_relations(location_in):
-        return None
-
-    async def fake_get_location_by_slug(db, slug):
-        return None
-
-    async def fake_admin_create_location(db, location_in, *, slug):
-        captured["slug"] = slug
-        return make_location(id=1, slug=slug, name="Роза Хутор")
-
-    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_slug",
-        fake_get_location_by_slug,
-    )
-    monkeypatch.setattr(
-        "app.services.locations.admin_create_location",
-        fake_admin_create_location,
-    )
-
-    asyncio.run(service.admin_create_location(location_in))
-
-    assert captured["slug"] == "custom-slug"
+    assert captured["slug"] == expected_slug
 
 
 def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
