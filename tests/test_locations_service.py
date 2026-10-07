@@ -486,7 +486,7 @@ def test_admin_create_location_links_styles_and_levels(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in))
+    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
 
     assert isinstance(result, Location)
     assert result.city_id == 1
@@ -528,7 +528,7 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in))
+    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
 
     assert isinstance(result, Location)
     assert result.city_id == 1
@@ -558,7 +558,15 @@ async def test_admin_create_location_service_raises_404_when_city_missing(monkey
 
     monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
 
-    async def fake_admin_create_location(db, location_in):
+    async def fake_get_location_by_slug(db, slug):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.locations.get_location_by_slug",
+        fake_get_location_by_slug,
+    )
+
+    async def fake_admin_create_location(db, location_in, *, slug):
         raise CityNotFoundError(999)
 
     monkeypatch.setattr(
@@ -583,6 +591,89 @@ def test_admin_location_create_requires_city_id():
         )
 
     assert "city_id" in exc_info.value.errors()[0]["loc"]
+
+
+def test_admin_create_location_generates_slug_from_name(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    location_in = AdminLocationCreate(
+        name="Роза Хутор",
+        city_id=1,
+        latitude=43.68,
+        longitude=40.29,
+        activity_ids=[],
+        styles=[],
+        levels=[],
+    )
+
+    captured = {}
+
+    async def fake_ensure_relations(location_in):
+        return None
+
+    async def fake_get_location_by_slug(db, slug):
+        return None
+
+    async def fake_admin_create_location(db, location_in, *, slug):
+        captured["slug"] = slug
+        return make_location(id=1, slug=slug, name="Роза Хутор")
+
+    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
+    monkeypatch.setattr(
+        "app.services.locations.get_location_by_slug",
+        fake_get_location_by_slug,
+    )
+    monkeypatch.setattr(
+        "app.services.locations.admin_create_location",
+        fake_admin_create_location,
+    )
+
+    asyncio.run(service.admin_create_location(location_in))
+
+    assert captured["slug"] == "roza-khutor"
+
+
+def test_admin_create_location_provided_slug_not_overwritten(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    location_in = AdminLocationCreate(
+        name="Роза Хутор",
+        slug="custom-slug",
+        city_id=1,
+        latitude=43.68,
+        longitude=40.29,
+        activity_ids=[],
+        styles=[],
+        levels=[],
+    )
+
+    captured = {}
+
+    async def fake_ensure_relations(location_in):
+        return None
+
+    async def fake_get_location_by_slug(db, slug):
+        return None
+
+    async def fake_admin_create_location(db, location_in, *, slug):
+        captured["slug"] = slug
+        return make_location(id=1, slug=slug, name="Роза Хутор")
+
+    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
+    monkeypatch.setattr(
+        "app.services.locations.get_location_by_slug",
+        fake_get_location_by_slug,
+    )
+    monkeypatch.setattr(
+        "app.services.locations.admin_create_location",
+        fake_admin_create_location,
+    )
+
+    asyncio.run(service.admin_create_location(location_in))
+
+    assert captured["slug"] == "custom-slug"
 
 
 def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
@@ -766,15 +857,17 @@ def test_admin_create_location_computes_distance(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in))
+    result = asyncio.run(admin_create_location(session, location_in,  slug="test-slug"))
 
     assert isinstance(result, Location)
     assert result.distance_to_city_km == Decimal("1681.346")
 
 
 def test_filter_within_radius_works_for_location():
+    statement = select(Location)
     result = filter_within_radius(
-        model=Location,
+        statement,
+        coords_column=Location.coords,
         latitude=54.79,
         longitude=56.03,
         radius=100,
