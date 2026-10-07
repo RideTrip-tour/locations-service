@@ -5,10 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from asyncpg.exceptions import UniqueViolationError as AsyncpgUniqueError
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -558,14 +560,6 @@ async def test_admin_create_location_service_raises_404_when_city_missing(monkey
 
     monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
 
-    async def fake_get_location_by_slug(db, slug):
-        return None
-
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_slug",
-        fake_get_location_by_slug,
-    )
-
     async def fake_admin_create_location(db, location_in, *, slug):
         raise CityNotFoundError(999)
 
@@ -620,18 +614,11 @@ def test_admin_create_location_slug(monkeypatch, input_slug, expected_slug):
     async def fake_ensure_relations(location_in):
         return None
 
-    async def fake_get_location_by_slug(db, slug):
-        return None
-
     async def fake_admin_create_location(db, location_in, *, slug):
         captured["slug"] = slug
         return make_location(id=1, slug=slug, name="Роза Хутор")
 
     monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
-    monkeypatch.setattr(
-        "app.services.locations.get_location_by_slug",
-        fake_get_location_by_slug,
-    )
     monkeypatch.setattr(
         "app.services.locations.admin_create_location",
         fake_admin_create_location,
@@ -640,6 +627,43 @@ def test_admin_create_location_slug(monkeypatch, input_slug, expected_slug):
     asyncio.run(service.admin_create_location(location_in))
 
     assert captured["slug"] == expected_slug
+
+
+@pytest.mark.asyncio
+async def test_admin_create_location_raises_409_on_slug_conflict(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_ensure_relations(location_in):
+        return None
+
+    async def fake_admin_create_location(db, location_in, *, slug):
+        assert db is session
+        assert slug == "roza-khutor"
+        raise IntegrityError("INSERT", None, AsyncpgUniqueError())
+
+    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
+    monkeypatch.setattr(
+        "app.services.locations.admin_create_location",
+        fake_admin_create_location,
+    )
+
+    location_in = AdminLocationCreate(
+        name="Роза Хутор",
+        city_id=1,
+        latitude=43.68,
+        longitude=40.29,
+        activity_ids=[],
+        styles=[],
+        levels=[],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.admin_create_location(location_in)
+
+    assert exc_info.value.status_code == 409
+    assert "already exists" in exc_info.value.detail
+    assert "roza-khutor" in exc_info.value.detail
 
 
 def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
