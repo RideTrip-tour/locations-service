@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, TypedDict
 
 from geoalchemy2.elements import WKBElement
 from geoalchemy2.functions import ST_Distance
@@ -306,9 +306,18 @@ async def list_locations(
     return list(result.scalars().all()), int(total or 0)
 
 
+class LocationFilterOptions(TypedDict):
+    regions: list[str]
+    cities: list[str]
+    countries: list[str]
+    activity_ids: list[int]
+    styles: list[str]
+    levels: list[str]
+
+
 async def list_location_filter_options(
     session: AsyncSession,
-) -> dict[str, list[int] | list[str]]:
+) -> LocationFilterOptions:
     filters = Location.is_active.is_(True)
 
     regions_result = await session.execute(

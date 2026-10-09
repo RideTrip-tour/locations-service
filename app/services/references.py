@@ -336,18 +336,18 @@ class ReferenceService:
     async def admin_update_city(
         self, item_id: int, name: str, region_id: int | None
     ) -> ReferenceRead:
-        fields = {"name": name}
+        fields: dict[str, str | int] = {"name": name}
         if region_id is not None:
-            fields["region_id"] = str(region_id)
+            fields["region_id"] = region_id
         updated = await self._update_reference(model=City, item_id=item_id, **fields)
         return updated
 
     async def admin_update_region(
         self, item_id: int, name: str, country_id: int | None
     ) -> ReferenceRead:
-        fields = {"name": name}
+        fields: dict[str, str | int] = {"name": name}
         if country_id is not None:
-            fields["country_id"] = str(country_id)
+            fields["country_id"] = country_id
         updated = await self._update_reference(model=Region, item_id=item_id, **fields)
         return updated
 
