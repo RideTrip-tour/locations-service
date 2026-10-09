@@ -8,6 +8,7 @@ from geoalchemy2.functions import ST_X, ST_Y
 from sqlalchemy import Select, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.crud.common import filter_within_radius, load_location_options, paginate
 from app.db.models import City, Location, Region
@@ -154,7 +155,7 @@ async def list_regions(
     offset: int = 0,
 ) -> tuple[Sequence[Region], int]:
     """Return a paginated list of regions with optional filter by country_id."""
-    statement = select(Region)
+    statement = select(Region).options(defer(Region.border))
     if country_id is not None:
         statement = statement.where(Region.country_id == country_id)
     statement = _apply_search_reference(
