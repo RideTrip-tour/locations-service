@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.client.gateway_client import GatewayClient
 from app.middlerware.request_context import user_context_middleware
 from app.routes.admin import admin_references_router
 from app.routes.admin import router as admin_location_router
@@ -18,8 +19,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("location-service is starting up")
-    yield
-    logger.info("location-service is shutting down")
+    app.state.gateway_client = GatewayClient()
+    try:
+        yield
+    finally:
+        await app.state.gateway_client.close()
+        logger.info("location-service is shutting down")
 
 
 def create_app() -> FastAPI:
