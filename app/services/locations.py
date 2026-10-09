@@ -208,7 +208,7 @@ class LocationService:
         try:
             location = await admin_create_location(self.session, location_in, slug=slug)
         except CityNotFoundError as exc:
-            logger.warning(
+            logger.exception(
                 "Location creation failed, city with id: %s not found", exc.city_id
             )
             raise HTTPException(
@@ -236,7 +236,7 @@ class LocationService:
                 self.session, location_id, location_in
             )
         except CityNotFoundError as e:
-            logger.warning(
+            logger.exception(
                 "Location update failed, city with id: %s not found", e.city_id
             )
             raise HTTPException(

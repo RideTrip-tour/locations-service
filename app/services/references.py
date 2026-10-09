@@ -424,7 +424,7 @@ class ReferenceService:
         try:
             await self._delete_reference(model=City, item_id=city_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "City deletion is failed, city with id %s linked to locations", city_id
             )
             raise map_fk_violation_to_http(
@@ -438,7 +438,7 @@ class ReferenceService:
         try:
             await self._delete_reference(model=Region, item_id=region_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "Region deletion is failed, cities linked to locations: %s",
                 linked_cities,
             )
@@ -453,7 +453,7 @@ class ReferenceService:
         try:
             await self._delete_reference(model=Country, item_id=country_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "Country deletion is failed, cities linked to locations: %s",
                 linked_cities,
             )

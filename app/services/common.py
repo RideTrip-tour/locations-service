@@ -30,7 +30,7 @@ def integrity_error_to_http(
 ) -> HTTPException:
     code = sql_error_code(exc)
     if code == UNIQUE_ERROR:
-        logger.warning(
+        logger.exception(
             "%s %s is failed, %s already exists",
             base_model.__name__,
             action,
@@ -41,7 +41,7 @@ def integrity_error_to_http(
         )
         return HTTPException(status_code=unique_status, detail=detail)
     if code == FK_ERROR:
-        logger.warning(
+        logger.exception(
             "%s %s is failed, parent_id %s not found",
             base_model.__name__,
             action,
