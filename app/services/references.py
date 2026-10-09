@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from decimal import Decimal
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -184,7 +185,11 @@ class ReferenceService:
             offset=offset,
         )
         return CityWithinRadius(
-            total=total, limit=limit, offset=offset, radius=radius, items=cities
+            total=total,
+            limit=limit,
+            offset=offset,
+            radius=Decimal(str(radius)),
+            items=[ReferenceRead.model_validate(city) for city in cities]
         )
 
     async def list_regions(
@@ -333,7 +338,7 @@ class ReferenceService:
     ) -> ReferenceRead:
         fields = {"name": name}
         if region_id is not None:
-            fields["region_id"] = region_id
+            fields["region_id"] = str(region_id)
         updated = await self._update_reference(model=City, item_id=item_id, **fields)
         return updated
 
@@ -342,7 +347,7 @@ class ReferenceService:
     ) -> ReferenceRead:
         fields = {"name": name}
         if country_id is not None:
-            fields["country_id"] = country_id
+            fields["country_id"] = str(country_id)
         updated = await self._update_reference(model=Region, item_id=item_id, **fields)
         return updated
 

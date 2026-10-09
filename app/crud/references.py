@@ -105,7 +105,7 @@ async def list_cities_within_radius(
     result, total = await paginate(
         session=session, statement=statement, model=City, limit=limit, offset=offset
     )
-    return result.scalars().all(), int(total or 0)
+    return list(result.scalars().all()), int(total or 0)
 
 
 async def admin_create_reference(

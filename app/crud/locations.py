@@ -28,9 +28,10 @@ from app.utils.geo import make_coords
 
 StrFilter = str | Sequence[str]
 IntFilter = int | Sequence[int]
+ScalarOrSeq = str | int | Sequence[str | int] | None
 
 
-def _as_sequence[T](value: T | Sequence[T] | None) -> list[T]:
+def _as_sequence(value: ScalarOrSeq) -> list[int | str]:
     """Convert a scalar or sequence filter value to a list."""
     if value is None:
         return []
@@ -45,7 +46,7 @@ def _normalize_text_values(value: StrFilter | None) -> list[str]:
     """Lowercase and split text filter values from scalar, list, or CSV input."""
     values: list[str] = []
     for item in _as_sequence(value):
-        values.extend(part.strip().lower() for part in item.split(",") if part.strip())
+        values.extend(part.strip().lower() for part in str(item).split(",") if part.strip())
     return values
 
 
@@ -302,7 +303,7 @@ async def list_locations(
         limit=limit,
         offset=offset,
     )
-    return result.scalars().all(), int(total or 0)
+    return list(result.scalars().all()), int(total or 0)
 
 
 async def list_location_filter_options(
@@ -385,7 +386,7 @@ async def list_locations_within_radius(
     result, total = await paginate(
         session=session, statement=statement, model=Location, limit=limit, offset=offset
     )
-    return result.scalars().all(), int(total or 0)
+    return list(result.scalars().all()), int(total or 0)
 
 
 async def _build_relations(
@@ -394,10 +395,14 @@ async def _build_relations(
     activity_ids: list[int] | None,
     styles: list[str] | None,
     levels: list[str] | None,
-) -> tuple[list, list, list]:
-    activities_rel = None
-    styles_rel = None
-    levels_rel = None
+) -> tuple[
+    list[LocationActivity],
+    list[LocationStyle],
+    list[LocationLevel],
+]:
+    activities_rel: list[LocationActivity] = []
+    styles_rel: list[LocationStyle] = []
+    levels_rel: list[LocationLevel] = []
 
     if activity_ids is not None:
         activities_rel = [
