@@ -378,8 +378,9 @@ async def list_locations_within_radius(
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Sequence[Location], int]:
+    statement = select(Location)
     statement = filter_within_radius(
-        Location, latitude=latitude, longitude=longitude, radius=radius
+        statement, Location.coords, latitude, longitude, radius
     ).options(*load_location_options())
 
     result, total = await paginate(
@@ -427,7 +428,8 @@ async def _ensure_city_exists(session: AsyncSession, city_id: int) -> City:
 
 
 async def admin_create_location(
-    session: AsyncSession, locations_in: AdminLocationCreate
+    session: AsyncSession,
+    locations_in: AdminLocationCreate,
 ) -> Location:
     location_data = locations_in.model_dump(exclude_unset=True)
     activity_ids = location_data.pop("activity_ids", [])

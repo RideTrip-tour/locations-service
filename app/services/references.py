@@ -19,6 +19,8 @@ from app.crud.references import (
     list_locations_by_reference,
     list_references,
 )
+from app.crud.references import list_cities as crud_list_cities
+from app.crud.references import list_regions as crud_list_regions
 from app.db.database import get_async_session
 from app.db.models import (
     City,
@@ -37,73 +39,16 @@ from app.schemas.references import (
     ReferenceLocationsResponse,
     ReferenceRead,
 )
-from app.types import JunctionT, ModelT, ParentModelT
+from app.services.common import integrity_error_to_http, map_fk_violation_to_http
+from app.types import JunctionT, ModelT
 from app.utils.geo import make_coords
 
 logger = logging.getLogger("location_service")
-
-FK_ERROR = "23503"
-UNIQUE_ERROR = "23505"
 
 
 class ReferenceService:
     def __init__(self, session: AsyncSession):
         self.session = session
-
-    @staticmethod
-    def _sql_error_code(exc: IntegrityError) -> str | None:
-        return getattr(exc.orig, "pgcode", None) or getattr(exc.orig, "sqlstate", None)
-
-    @staticmethod
-    def _integrity_error_to_http(
-        exc: IntegrityError,
-        action: str,
-        item_name: str,
-        base_model: type[ModelT],
-        parent_id: int | None = None,
-        parent_model: type[ParentModelT] | None = None,
-    ) -> HTTPException:
-        code = ReferenceService._sql_error_code(exc)
-        if code == UNIQUE_ERROR:
-            logger.warning(
-                "%s %s is failed, %s already exists",
-                base_model.__name__,
-                action,
-                item_name,
-            )
-            return HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{base_model.__name__} with name '{item_name}' already exists",
-            )
-        if code == FK_ERROR:
-            parent_name = parent_model.__name__ if parent_model else "Parent"
-            logger.warning(
-                "%s %s is failed, parent_id %s not found",
-                base_model.__name__,
-                action,
-                parent_id,
-            )
-            return HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"{parent_name} with id {parent_id} not found",
-            )
-        return HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"{base_model.__name__} {action} failed: {exc.orig}",
-        )
-
-    @staticmethod
-    def _map_fk_violation_to_http(exc: IntegrityError, detail: str) -> HTTPException:
-        code = ReferenceService._sql_error_code(exc)
-        if code == FK_ERROR:
-            return HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=detail,
-            )
-        return HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=exc.orig,
-        )
 
     async def _get_reference_or_404(self, model: type[ModelT], item_id: int) -> ModelT:
         """Get reference by ID or raise 404."""
@@ -145,30 +90,44 @@ class ReferenceService:
     async def list_cities(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         city_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
     ):
-        return await self._list_references(
-            model=City, name=name, item_id=city_id, limit=limit, offset=offset
+        items, total = await crud_list_cities(
+            self.session,
+            region_id=region_id,
+            name=name,
+            item_id=city_id,
+            limit=limit,
+            offset=offset,
+        )
+        return ReferenceListResponse(
+            items=[ReferenceRead.model_validate(item) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     async def admin_cities_list(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         city_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
     ):
         return await self._list_cities_with_coords(
-            name=name, item_id=city_id, limit=limit, offset=offset
+            region_id=region_id, name=name, item_id=city_id, limit=limit, offset=offset
         )
 
     async def list_cities_in_radius(
         self,
         *,
+        region_id: int | None = None,
         latitude: float,
         longitude: float,
         radius: float,
@@ -177,6 +136,7 @@ class ReferenceService:
     ) -> CityWithinRadius:
         cities, total = await list_cities_within_radius(
             self.session,
+            region_id=region_id,
             latitude=latitude,
             longitude=longitude,
             radius=radius,
@@ -190,13 +150,25 @@ class ReferenceService:
     async def list_regions(
         self,
         *,
+        country_id: int | None = None,
         name: str | None = None,
         region_id: int | list[int] | None = None,
         limit: int = 20,
         offset: int = 0,
-    ):
-        return await self._list_references(
-            model=Region, name=name, item_id=region_id, limit=limit, offset=offset
+    ) -> ReferenceListResponse:
+        items, total = await crud_list_regions(
+            self.session,
+            country_id=country_id,
+            name=name,
+            item_id=region_id,
+            limit=limit,
+            offset=offset,
+        )
+        return ReferenceListResponse(
+            items=[ReferenceRead.model_validate(item) for item in items],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     async def list_countries(
@@ -238,6 +210,7 @@ class ReferenceService:
     async def _list_cities_with_coords(
         self,
         *,
+        region_id: int | None = None,
         name: str | None = None,
         item_id: int | list[int] | None = None,
         limit: int = 20,
@@ -245,6 +218,7 @@ class ReferenceService:
     ) -> AdminCityListResponse:
         items, total = await list_cities_with_coords(
             self.session,
+            region_id=region_id,
             name=name,
             item_id=item_id,
             limit=limit,
@@ -279,7 +253,7 @@ class ReferenceService:
                 self.session, model=Region, name=name, country_id=country_id
             )
         except IntegrityError as exc:
-            raise self._integrity_error_to_http(
+            raise integrity_error_to_http(
                 exc=exc,
                 action="creation",
                 item_name=name,
@@ -302,7 +276,7 @@ class ReferenceService:
                 coords=make_coords(latitude=latitude, longitude=longitude),
             )
         except IntegrityError as exc:
-            raise self._integrity_error_to_http(
+            raise integrity_error_to_http(
                 exc=exc,
                 action="creation",
                 item_name=name,
@@ -316,7 +290,7 @@ class ReferenceService:
         try:
             item = await admin_create_reference(self.session, model=model, name=name)
         except IntegrityError as exc:
-            raise self._integrity_error_to_http(
+            raise integrity_error_to_http(
                 exc=exc, action="creation", item_name=name, base_model=model
             ) from exc
         logger.info("%s was successfully created", model.__name__)
@@ -358,7 +332,7 @@ class ReferenceService:
             )
         except IntegrityError as exc:
             parent_id = fields.get("region_id") or fields.get("country_id")
-            raise self._integrity_error_to_http(
+            raise integrity_error_to_http(
                 exc=exc,
                 action="update",
                 item_name=fields["name"],
@@ -450,10 +424,10 @@ class ReferenceService:
         try:
             await self._delete_reference(model=City, item_id=city_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "City deletion is failed, city with id %s linked to locations", city_id
             )
-            raise self._map_fk_violation_to_http(
+            raise map_fk_violation_to_http(
                 exc=exc,
                 detail="Cannot delete: City is linked to locations. Move or delete those locations first",
             ) from exc
@@ -464,11 +438,11 @@ class ReferenceService:
         try:
             await self._delete_reference(model=Region, item_id=region_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "Region deletion is failed, cities linked to locations: %s",
                 linked_cities,
             )
-            raise self._map_fk_violation_to_http(
+            raise map_fk_violation_to_http(
                 exc=exc,
                 detail=f"Cannot delete: {', '.join(linked_cities)} are linked to locations. Move or delete those locations first",
             ) from exc
@@ -479,11 +453,11 @@ class ReferenceService:
         try:
             await self._delete_reference(model=Country, item_id=country_id)
         except IntegrityError as exc:
-            logger.warning(
+            logger.exception(
                 "Country deletion is failed, cities linked to locations: %s",
                 linked_cities,
             )
-            raise self._map_fk_violation_to_http(
+            raise map_fk_violation_to_http(
                 exc=exc,
                 detail=f"Cannot delete: {', '.join(linked_cities)} are linked to locations. Move or delete those locations first",
             ) from exc

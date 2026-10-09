@@ -773,8 +773,10 @@ def test_admin_create_location_computes_distance(monkeypatch):
 
 
 def test_filter_within_radius_works_for_location():
+    statement = select(Location)
     result = filter_within_radius(
-        model=Location,
+        statement,
+        coords_column=Location.coords,
         latitude=54.79,
         longitude=56.03,
         radius=100,

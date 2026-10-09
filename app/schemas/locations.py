@@ -20,7 +20,6 @@ class LocationBase(BaseModel):
     styles: list[str] = Field(default_factory=list)
     levels: list[str] = Field(default_factory=list)
     is_active: bool = True
-    slug: str | None = None
 
 
 class LocationRead(LocationBase):

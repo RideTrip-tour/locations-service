@@ -40,6 +40,16 @@ def _apply_search_reference(
     return statement
 
 
+def _apply_fk_filter(
+    statement: Select,
+    column,
+    value: int | None,
+) -> Select:
+    if value is not None:
+        statement = statement.where(column == value)
+    return statement
+
+
 async def list_references(
     session: AsyncSession,
     model: type[ModelT],
@@ -63,6 +73,7 @@ async def list_references(
 async def list_cities_with_coords(
     session: AsyncSession,
     *,
+    region_id: int | None = None,
     name: str | None = None,
     item_id: int | list[int] | None = None,
     limit: int = 20,
@@ -75,6 +86,7 @@ async def list_cities_with_coords(
         ST_Y(cast(City.coords, Geometry)).label("latitude"),
         ST_X(cast(City.coords, Geometry)).label("longitude"),
     )
+    statement = _apply_fk_filter(statement, City.region_id, region_id)
     statement = _apply_search_reference(
         model=City, statement=statement, name=name, item_id=item_id
     )
@@ -93,17 +105,63 @@ async def list_cities_with_coords(
 async def list_cities_within_radius(
     session: AsyncSession,
     *,
+    region_id: int | None = None,
     latitude: float,
     longitude: float,
     radius: float,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Sequence[City], int]:
+    statement = select(City)
     statement = filter_within_radius(
-        City, latitude=latitude, longitude=longitude, radius=radius
+        statement, City.coords, latitude, longitude, radius
+    )
+    statement = _apply_fk_filter(statement, City.region_id, region_id)
+    result, total = await paginate(
+        session=session, statement=statement, model=City, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
+
+
+async def list_cities(
+    session: AsyncSession,
+    *,
+    region_id: int | None = None,
+    name: str | None = None,
+    item_id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[City], int]:
+    """Return a paginated list of cities with optional filter by region_id."""
+    statement = select(City)
+    statement = _apply_fk_filter(statement, City.region_id, region_id)
+    statement = _apply_search_reference(
+        model=City, statement=statement, name=name, item_id=item_id
     )
     result, total = await paginate(
         session=session, statement=statement, model=City, limit=limit, offset=offset
+    )
+    return result.scalars().all(), int(total or 0)
+
+
+async def list_regions(
+    session: AsyncSession,
+    *,
+    country_id: int | None = None,
+    name: str | None = None,
+    item_id: int | list[int] | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[Sequence[Region], int]:
+    """Return a paginated list of regions with optional filter by country_id."""
+    statement = select(Region)
+    if country_id is not None:
+        statement = statement.where(Region.country_id == country_id)
+    statement = _apply_search_reference(
+        model=Region, statement=statement, name=name, item_id=item_id
+    )
+    result, total = await paginate(
+        session=session, statement=statement, model=Region, limit=limit, offset=offset
     )
     return result.scalars().all(), int(total or 0)
 

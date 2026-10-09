@@ -200,18 +200,16 @@ class LocationService:
     async def admin_create_location(
         self, location_in: AdminLocationCreate
     ) -> AdminLocationRead:
-        await self._ensure_relations_exist(location_in)
-
         try:
             location = await admin_create_location(self.session, location_in)
-        except CityNotFoundError as e:
-            logger.warning(
-                "Location creation failed, city with id: %s not found", e.city_id
+        except CityNotFoundError as exc:
+            logger.exception(
+                "Location creation failed, city with id: %s not found", exc.city_id
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"City with id {e.city_id} not found.",
-            ) from e
+                detail=f"City with id {exc.city_id} not found.",
+            ) from exc
         logger.info("Location with id %s was successfully created", location.id)
         return AdminLocationRead.model_validate(location)
 
@@ -224,7 +222,7 @@ class LocationService:
                 self.session, location_id, location_in
             )
         except CityNotFoundError as e:
-            logger.warning(
+            logger.exception(
                 "Location update failed, city with id: %s not found", e.city_id
             )
             raise HTTPException(

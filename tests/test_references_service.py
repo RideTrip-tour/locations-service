@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
 from app.db.models import (
@@ -1630,14 +1631,18 @@ def test_list_regions_filters_by_name_and_id(monkeypatch):
     service = ReferenceService(session)
     region = make_reference(Region, id=2, name="Краснодарский край")
 
-    async def fake_list_references(db, model, **kwargs):
+    async def fake_list_regions(
+        db, *, country_id=None, name=None, item_id=None, limit=20, offset=0
+    ):
         assert db is session
-        assert model is Region
-        assert kwargs["name"] == "крас"
-        assert kwargs["item_id"] == 2
+        assert name == "крас"
+        assert item_id == 2
         return [region], 1
 
-    monkeypatch.setattr("app.services.references.list_references", fake_list_references)
+    monkeypatch.setattr(
+        "app.services.references.crud_list_regions",
+        fake_list_regions,
+    )
 
     result = asyncio.run(service.list_regions(name="крас", region_id=2))
 
@@ -1650,14 +1655,18 @@ def test_list_cities_filters_by_name_and_id(monkeypatch):
     service = ReferenceService(session)
     city = make_reference(City, id=3, name="Сочи")
 
-    async def fake_list_references(db, model, **kwargs):
+    async def fake_list_cities(
+        db, *, region_id=None, name=None, item_id=None, limit=20, offset=0
+    ):
         assert db is session
-        assert model is City
-        assert kwargs["name"] == "сочи"
-        assert kwargs["item_id"] == 3
+        assert name == "сочи"
+        assert item_id == 3
         return [city], 1
 
-    monkeypatch.setattr("app.services.references.list_references", fake_list_references)
+    monkeypatch.setattr(
+        "app.services.references.crud_list_cities",
+        fake_list_cities,
+    )
 
     result = asyncio.run(service.list_cities(name="сочи", city_id=3))
 
@@ -1666,12 +1675,11 @@ def test_list_cities_filters_by_name_and_id(monkeypatch):
 
 
 def test_admin_cities_list_filters_by_name_and_id(monkeypatch):
-    """Админская ручка отдаёт города с координатами."""
     session = FakeSession()
     service = ReferenceService(session)
 
     async def fake_list_cities_with_coords(
-        db, *, name=None, item_id=None, limit=20, offset=0
+        db, *, region_id=None, name=None, item_id=None, limit=20, offset=0
     ):
         assert db is session
         assert name == "сочи"
@@ -1706,6 +1714,80 @@ def test_admin_cities_list_filters_by_name_and_id(monkeypatch):
     assert city.longitude == 39.7231
 
 
+def test_admin_cities_list_filters_by_region_id(monkeypatch):
+    session = FakeSession()
+    service = ReferenceService(session)
+    captured = {}
+
+    async def fake_list_cities_with_coords(
+        db,
+        *,
+        region_id=None,
+        name=None,
+        item_id=None,
+        limit=20,
+        offset=0,
+    ):
+        assert db is session
+        captured["region_id"] = region_id
+        return [
+            {"id": 3, "name": "Сочи", "latitude": 43.58, "longitude": 39.72},
+        ], 1
+
+    monkeypatch.setattr(
+        "app.services.references.list_cities_with_coords",
+        fake_list_cities_with_coords,
+    )
+
+    result = asyncio.run(service.admin_cities_list(region_id=5))
+
+    assert captured["region_id"] == 5
+    assert result.total == 1
+
+
+def test_list_cities_filters_by_region_id(monkeypatch):
+    session = FakeSession()
+    service = ReferenceService(session)
+    city = make_reference(City, id=3, name="Сочи")
+    captured = {}
+
+    async def fake_list_cities(
+        db, *, region_id=None, name=None, item_id=None, limit=20, offset=0
+    ):
+        assert db is session
+        captured["region_id"] = region_id
+        return [city], 1
+
+    monkeypatch.setattr(
+        "app.services.references.crud_list_cities",
+        fake_list_cities,
+    )
+
+    result = asyncio.run(service.list_cities(region_id=5))
+
+    assert captured["region_id"] == 5
+    assert result.total == 1
+
+
+def test_list_cities_without_region_id(monkeypatch):
+    session = FakeSession()
+    service = ReferenceService(session)
+    captured = {}
+
+    async def fake_list_cities(db, *, region_id=None, **kwargs):
+        captured["region_id"] = region_id
+        return [], 0
+
+    monkeypatch.setattr(
+        "app.services.references.crud_list_cities",
+        fake_list_cities,
+    )
+
+    asyncio.run(service.list_cities())
+
+    assert captured["region_id"] is None
+
+
 def test_list_countries_returns_reference_list_response(monkeypatch):
     session = FakeSession()
     service = ReferenceService(session)
@@ -1723,9 +1805,54 @@ def test_list_countries_returns_reference_list_response(monkeypatch):
     assert result.items[0].name == "Россия"
 
 
+def test_list_regions_filters_by_country_id(monkeypatch):
+    session = FakeSession()
+    service = ReferenceService(session)
+    region = make_reference(Region, id=2, name="Краснодарский край")
+    captured = {}
+
+    async def fake_list_regions(
+        db, *, country_id=None, name=None, item_id=None, limit=20, offset=0
+    ):
+        assert db is session
+        captured["country_id"] = country_id
+        return [region], 1
+
+    monkeypatch.setattr(
+        "app.services.references.crud_list_regions",
+        fake_list_regions,
+    )
+
+    result = asyncio.run(service.list_regions(country_id=1))
+
+    assert captured["country_id"] == 1
+    assert result.total == 1
+
+
+def test_list_regions_without_country_id(monkeypatch):
+    session = FakeSession()
+    service = ReferenceService(session)
+    captured = {}
+
+    async def fake_list_regions(db, *, country_id=None, **kwargs):
+        captured["country_id"] = country_id
+        return [], 0
+
+    monkeypatch.setattr(
+        "app.services.references.crud_list_regions",
+        fake_list_regions,
+    )
+
+    asyncio.run(service.list_regions())
+
+    assert captured["country_id"] is None
+
+
 def test_filter_within_radius_adds_st_dwithin():
+    statement = select(City)
     result = filter_within_radius(
-        model=City,
+        statement,
+        coords_column=City.coords,
         latitude=54.79,
         longitude=56.03,
         radius=2000,
@@ -1737,8 +1864,13 @@ def test_filter_within_radius_adds_st_dwithin():
 
 
 def test_filter_within_radius_converts_km_to_meters():
+    statement = select(City)
     result = filter_within_radius(
-        model=City, latitude=54.79, longitude=56.03, radius=2000
+        statement,
+        coords_column=City.coords,
+        latitude=54.79,
+        longitude=56.03,
+        radius=2000,
     )
 
     compiled = str(
@@ -1750,8 +1882,13 @@ def test_filter_within_radius_converts_km_to_meters():
 
 
 def test_filter_within_radius_accepts_float_km():
+    statement = select(City)
     result = filter_within_radius(
-        model=City, latitude=54.79, longitude=56.03, radius=1.5
+        statement,
+        coords_column=City.coords,
+        latitude=54.79,
+        longitude=56.03,
+        radius=1.5,
     )
 
     compiled = str(

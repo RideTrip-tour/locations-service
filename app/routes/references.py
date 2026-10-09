@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.routes.query_params import (
+    FKIdQuery,
     LatitudeQuery,
     LimitQuery,
     LongitudeQuery,
@@ -40,12 +41,15 @@ async def read_levels(
 @router.get("/cities", response_model=ReferenceListResponse)
 async def read_cities(
     service: ReferenceServiceDep,
+    region_id: FKIdQuery = None,
     name: ReferenceNameQuery = None,
     id: ReferenceIdQuery = None,
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
-    return await service.list_cities(name=name, city_id=id, limit=limit, offset=offset)
+    return await service.list_cities(
+        region_id=region_id, name=name, city_id=id, limit=limit, offset=offset
+    )
 
 
 @router.get("/radius", response_model=CityWithinRadius)
@@ -54,11 +58,13 @@ async def read_cities_within_radius(
     latitude: LatitudeQuery,
     longitude: LongitudeQuery,
     radius: RadiusQuery,
+    region_id: FKIdQuery = None,
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
     """Returns a paginated list of cities within the given radius."""
     return await service.list_cities_in_radius(
+        region_id=region_id,
         latitude=latitude,
         longitude=longitude,
         radius=radius,
@@ -70,13 +76,14 @@ async def read_cities_within_radius(
 @router.get("/regions", response_model=ReferenceListResponse)
 async def read_regions(
     service: ReferenceServiceDep,
+    country_id: FKIdQuery = None,
     name: ReferenceNameQuery = None,
     id: ReferenceIdQuery = None,
     limit: LimitQuery = 20,
     offset: OffsetQuery = 0,
 ):
     return await service.list_regions(
-        name=name, region_id=id, limit=limit, offset=offset
+        country_id=country_id, name=name, region_id=id, limit=limit, offset=offset
     )
 
 
