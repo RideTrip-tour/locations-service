@@ -428,7 +428,8 @@ async def _ensure_city_exists(session: AsyncSession, city_id: int) -> City:
 
 
 async def admin_create_location(
-    session: AsyncSession, locations_in: AdminLocationCreate,
+    session: AsyncSession,
+    locations_in: AdminLocationCreate,
 ) -> Location:
     location_data = locations_in.model_dump(exclude_unset=True)
     activity_ids = location_data.pop("activity_ids", [])

@@ -5,12 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from asyncpg.exceptions import UniqueViolationError as AsyncpgUniqueError
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.exc import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -488,7 +486,7 @@ def test_admin_create_location_links_styles_and_levels(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
+    result = asyncio.run(admin_create_location(session, location_in))
 
     assert isinstance(result, Location)
     assert result.city_id == 1
@@ -530,7 +528,7 @@ def test_admin_create_location_with_empty_lists(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
+    result = asyncio.run(admin_create_location(session, location_in))
 
     assert isinstance(result, Location)
     assert result.city_id == 1
@@ -560,7 +558,7 @@ async def test_admin_create_location_service_raises_404_when_city_missing(monkey
 
     monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
 
-    async def fake_admin_create_location(db, location_in, *, slug):
+    async def fake_admin_create_location(db, location_in):
         raise CityNotFoundError(999)
 
     monkeypatch.setattr(
@@ -585,85 +583,6 @@ def test_admin_location_create_requires_city_id():
         )
 
     assert "city_id" in exc_info.value.errors()[0]["loc"]
-
-
-@pytest.mark.parametrize(
-    "input_slug, expected_slug",
-    [
-        (None, "roza-khutor"),
-        ("custom-slug", "custom-slug"),
-    ],
-)
-def test_admin_create_location_slug(monkeypatch, input_slug, expected_slug):
-    session = FakeSession()
-    service = LocationService(session)
-
-    location_in = AdminLocationCreate(
-        name="Роза Хутор",
-        slug=input_slug,
-        city_id=1,
-        latitude=43.68,
-        longitude=40.29,
-        activity_ids=[],
-        styles=[],
-        levels=[],
-    )
-
-    captured = {}
-
-    async def fake_ensure_relations(location_in):
-        return None
-
-    async def fake_admin_create_location(db, location_in, *, slug):
-        captured["slug"] = slug
-        return make_location(id=1, slug=slug, name="Роза Хутор")
-
-    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
-    monkeypatch.setattr(
-        "app.services.locations.admin_create_location",
-        fake_admin_create_location,
-    )
-
-    asyncio.run(service.admin_create_location(location_in))
-
-    assert captured["slug"] == expected_slug
-
-
-@pytest.mark.asyncio
-async def test_admin_create_location_raises_409_on_slug_conflict(monkeypatch):
-    session = FakeSession()
-    service = LocationService(session)
-
-    async def fake_ensure_relations(location_in):
-        return None
-
-    async def fake_admin_create_location(db, location_in, *, slug):
-        assert db is session
-        assert slug == "roza-khutor"
-        raise IntegrityError("INSERT", None, AsyncpgUniqueError())
-
-    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
-    monkeypatch.setattr(
-        "app.services.locations.admin_create_location",
-        fake_admin_create_location,
-    )
-
-    location_in = AdminLocationCreate(
-        name="Роза Хутор",
-        city_id=1,
-        latitude=43.68,
-        longitude=40.29,
-        activity_ids=[],
-        styles=[],
-        levels=[],
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await service.admin_create_location(location_in)
-
-    assert exc_info.value.status_code == 409
-    assert "already exists" in exc_info.value.detail
-    assert "roza-khutor" in exc_info.value.detail
 
 
 def test_admin_location_update_schema_accepts_partial_data_and_pairs_coordinates():
@@ -847,7 +766,7 @@ def test_admin_create_location_computes_distance(monkeypatch):
     monkeypatch.setattr(session, "add", lambda obj: None)
     monkeypatch.setattr(session, "commit", session.commit)
 
-    result = asyncio.run(admin_create_location(session, location_in, slug="test-slug"))
+    result = asyncio.run(admin_create_location(session, location_in))
 
     assert isinstance(result, Location)
     assert result.distance_to_city_km == Decimal("1681.346")

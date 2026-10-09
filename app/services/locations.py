@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.locations import (
@@ -17,7 +16,6 @@ from app.crud.locations import (
     list_locations_within_radius,
 )
 from app.db.database import get_async_session
-from app.db.models import Location
 from app.exceptions import CityNotFoundError
 from app.schemas.admin import (
     AdminLocationCreate,
@@ -30,7 +28,6 @@ from app.schemas.locations import (
     LocationRead,
     LocationWithinRadius,
 )
-from app.services.common import integrity_error_to_http
 
 StrFilter = str | list[str]
 IntFilter = int | list[int]
