@@ -19,7 +19,9 @@ async def paginate(
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[Result, int]:
-    total_statement = select(func.count()).select_from(statement.subquery())
+    total_statement = select(func.count()).select_from(
+        statement.with_only_columns(model.id).subquery()
+    )
     total = await session.scalar(total_statement)
 
     statement = statement.order_by(model.name).limit(limit).offset(offset)
