@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from fastapi import Depends, HTTPException, status
-from slugify import slugify
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,9 +203,8 @@ class LocationService:
     async def admin_create_location(
         self, location_in: AdminLocationCreate
     ) -> AdminLocationRead:
-        slug = location_in.slug or slugify(location_in.name)
         try:
-            location = await admin_create_location(self.session, location_in, slug=slug)
+            location = await admin_create_location(self.session, location_in)
         except CityNotFoundError as exc:
             logger.exception(
                 "Location creation failed, city with id: %s not found", exc.city_id
@@ -214,15 +212,6 @@ class LocationService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"City with id {exc.city_id} not found.",
-            ) from exc
-        except IntegrityError as exc:
-            raise integrity_error_to_http(
-                exc,
-                action="creation",
-                item_name=slug,
-                base_model=Location,
-                unique_status=status.HTTP_409_CONFLICT,
-                unique_detail=f"Slug '{slug}' already exists",
             ) from exc
         logger.info("Location with id %s was successfully created", location.id)
         return AdminLocationRead.model_validate(location)

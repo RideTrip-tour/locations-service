@@ -48,7 +48,6 @@ class AdminLocationUpdate(BaseModel):
     styles: list[str] | None = Field(default=None)
     levels: list[str] | None = Field(default=None)
     is_active: bool | None = Field(default=None)
-    slug: str | None = Field(default=None, min_length=1, max_length=150)
 
     @model_validator(mode="after")
     def check_coords_pair(self):
