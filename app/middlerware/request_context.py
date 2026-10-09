@@ -6,6 +6,8 @@ import re
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
+from app.middlerware.context import user_claims
+
 logger = logging.getLogger("location_service")
 
 
@@ -74,11 +76,15 @@ async def user_context_middleware(request: Request, call_next):
             else:
                 request.state.user = {}
                 logger.debug("No user context found in request")
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             logger.warning(f"Invalid X-User-Claims header: {e}")
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Unauthorized"},
             )
 
-    return await call_next(request)
+    token = user_claims.set(request.state.user)
+    try:
+        return await call_next(request)
+    finally:
+        user_claims.reset(token)
