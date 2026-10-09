@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.middlerware.context import user_claims
 from app.middlerware.request_context import user_context_middleware
 
 
@@ -96,6 +97,25 @@ async def test_middleware_claims_priority():
 
     assert request.state.user_id == 999
     call_next.assert_called_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_middleware_restores_user_claims_context():
+    request = create_request(
+        {
+            "x-user-claims": base64.urlsafe_b64encode(
+                json.dumps({"id": 123}).encode()
+            ).decode()
+        }
+    )
+
+    async def call_next(req):
+        assert user_claims.get() == {"id": 123}
+        return {"status": "ok"}
+
+    await user_context_middleware(request, call_next)
+
+    assert user_claims.get() is None
 
 
 @pytest.mark.asyncio
