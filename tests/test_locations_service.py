@@ -24,7 +24,7 @@ from app.crud.locations import (  # noqa E402
     get_location_by_id,
     get_reference_options,
     _get_distance_to_city_km,
-    admin_delete_location_by_id
+    admin_delete_location_by_id,
 )
 from app.db.models import Location, LocationActivity, LocationLevel, LocationStyle
 from app.routes.query_params import (
@@ -148,9 +148,7 @@ async def test_get_distance_to_city_km_returns_none_when_no_row(monkeypatch):
     session = FakeSession()
 
     async def fake_execute(statement):
-        return SimpleNamespace(
-            scalars=lambda: SimpleNamespace(first=lambda: None)
-        )
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
 
     monkeypatch.setattr(session, "execute", fake_execute)
 
@@ -848,9 +846,7 @@ async def test_admin_update_location_returns_location_when_fields_set_is_empty(
         "app.crud.locations.get_location_by_id", fake_get_location_by_id
     )
 
-    result = await crud_admin_update_location(
-        session, 1, AdminLocationUpdate()
-    )
+    result = await crud_admin_update_location(session, 1, AdminLocationUpdate())
 
     assert result is location
     assert session.commits == 0
@@ -911,13 +907,9 @@ async def test_admin_update_location_updates_activity_ids_when_provided(monkeypa
     async def fake_execute(statement):
         compiled = str(statement.compile(dialect=postgresql.dialect()))
         if "location_styles" in compiled or "styles" in compiled:
-            return SimpleNamespace(
-                scalars=lambda: SimpleNamespace(all=lambda: [])
-            )
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
         if "levels" in compiled:
-            return SimpleNamespace(
-                scalars=lambda: SimpleNamespace(all=lambda: [])
-            )
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
         return SimpleNamespace(scalar_one=lambda: location)
 
     monkeypatch.setattr(
@@ -953,9 +945,7 @@ async def test_admin_update_location_recomputes_distance_when_coords_change(
         "app.crud.locations.get_location_by_id", fake_get_location_by_id
     )
     monkeypatch.setattr(session, "execute", fake_execute)
-    monkeypatch.setattr(
-        "app.crud.locations._get_distance_to_city_km", fake_distance
-    )
+    monkeypatch.setattr("app.crud.locations._get_distance_to_city_km", fake_distance)
 
     await crud_admin_update_location(
         session, 1, AdminLocationUpdate(latitude=43.6, longitude=40.3)
@@ -991,13 +981,9 @@ async def test_admin_update_location_recomputes_distance_when_city_changes(
         "app.crud.locations.get_location_by_id", fake_get_location_by_id
     )
     monkeypatch.setattr(session, "execute", fake_execute)
-    monkeypatch.setattr(
-        "app.crud.locations._get_distance_to_city_km", fake_distance
-    )
+    monkeypatch.setattr("app.crud.locations._get_distance_to_city_km", fake_distance)
 
-    await crud_admin_update_location(
-        session, 1, AdminLocationUpdate(city_id=2)
-    )
+    await crud_admin_update_location(session, 1, AdminLocationUpdate(city_id=2))
 
     assert location.city_id == 2
     assert location.distance_to_city_km == Decimal("7.000")

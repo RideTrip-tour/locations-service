@@ -35,10 +35,10 @@ from app.crud.references import (
     admin_update_reference,
     get_city_names_by_country,
     get_city_names_by_region,
+    list_cities_with_coords,
+    list_cities_within_radius,
     list_locations_by_reference,
     list_references,
-    list_cities_within_radius,
-    list_cities_with_coords
 )
 from app.routes.admin import (
     admin_references_router,
@@ -2014,9 +2014,7 @@ def test_crud_list_regions_filters_by_country_and_name(monkeypatch):
 
     from app.crud.references import list_regions as crud_list_regions
 
-    items, total = asyncio.run(
-        crud_list_regions(session, country_id=1, name="крас")
-    )
+    items, total = asyncio.run(crud_list_regions(session, country_id=1, name="крас"))
 
     assert list(items) == [region]
     assert total == 1
@@ -2110,9 +2108,7 @@ def test_crud_list_cities_with_coords_filters_by_id_list(monkeypatch):
     monkeypatch.setattr(session, "scalar", fake_scalar)
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    items, total = asyncio.run(
-        list_cities_with_coords(session, item_id=[3, 4])
-    )
+    items, total = asyncio.run(list_cities_with_coords(session, item_id=[3, 4]))
 
     assert total == 1
     assert items == [row._mapping]
@@ -2165,9 +2161,7 @@ def test_crud_list_cities_within_radius_without_region(monkeypatch):
     monkeypatch.setattr(session, "execute", fake_execute)
 
     items, total = asyncio.run(
-        list_cities_within_radius(
-            session, latitude=43.6, longitude=40.3, radius=10.0
-        )
+        list_cities_within_radius(session, latitude=43.6, longitude=40.3, radius=10.0)
     )
 
     assert list(items) == []
