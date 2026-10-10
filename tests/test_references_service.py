@@ -1444,7 +1444,8 @@ def test_create_regions_returns_service_result():
     assert result is expected
 
 
-def test_create_regions_propagates_http_exception():
+@pytest.mark.asyncio
+async def test_create_regions_propagates_http_exception():
     service = SimpleNamespace()
 
     async def fake_admin_create_region(name, country_id, border=None):
@@ -1454,7 +1455,7 @@ def test_create_regions_propagates_http_exception():
     region_data = SimpleNamespace(name="X", country_id=1, border=None)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(create_regions(service=service, region_data=region_data))
+        await create_regions(service=service, region_data=region_data)
 
     assert exc_info.value.status_code == 409
 
