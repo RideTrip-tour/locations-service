@@ -31,7 +31,7 @@ from app.db.models import (
     Region,
     Style,
 )
-from app.schemas.admin import AdminCityListResponse, AdminCityRead
+from app.schemas.admin import AdminCityListResponse, AdminCityRead, RegionBorder
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
     CityWithinRadius,
@@ -247,7 +247,7 @@ class ReferenceService:
         return await self._create_reference(model=Country, name=name)
 
     async def admin_create_region(
-        self, name: str, country_id: int, border: dict
+        self, name: str, country_id: int, border: RegionBorder
     ) -> ReferenceRead:
         """Create a region linked to a country."""
         border_element = None

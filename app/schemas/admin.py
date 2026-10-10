@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from geojson_pydantic import Feature, FeatureCollection, MultiPolygon, Polygon
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.locations import LocationBase
 from app.schemas.mixins import PaginationMixin
 from app.schemas.references import ReferenceBase, ReferenceRead
+
+RegionBorder = FeatureCollection[Feature[Polygon | MultiPolygon, dict]]
 
 
 class AdminLocationBase(LocationBase):
@@ -64,23 +67,9 @@ class AdminReferenceCreate(ReferenceBase):
 
 class AdminRegionCreate(ReferenceBase):
     country_id: int
-    border: dict = Field(description="GeoJSON FeatureCollection от geojson.io")
-
-    @field_validator("border")
-    @classmethod
-    def validate_border(cls, value: dict):
-        if value is None:
-            return None
-        if value.get("type") != "FeatureCollection":
-            raise ValueError("FeatureCollection is awaited.")
-        features = value.get("features", [])
-        if not features:
-            raise ValueError("FeatureCollection is empty.")
-        for feature in features:
-            geom_type = feature.get("geometry", {}).get("type")
-            if geom_type not in ("Polygon", "MultiPolygon"):
-                raise ValueError(f"Unsoppurted type: {geom_type}")
-        return value
+    border: RegionBorder = Field(
+        description="GeoJSON FeatureCollection от geojson.io. Doc for FeatureCollection, https://turfjs.org/docs/api/featureCollection."
+    )
 
 
 class AdminCityCreate(ReferenceBase):
