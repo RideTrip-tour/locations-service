@@ -88,6 +88,7 @@ ReferenceIdQuery = Annotated[
         description="Reference ids. Supports repeated values and CSV, e.g. activity_id=1&activity_id=2 or 1,2."
     ),
 ]
+FKIdQuery = Annotated[int | None, Query()]
 StringListQuery = Annotated[list[str] | None, Query()]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
