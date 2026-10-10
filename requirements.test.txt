@@ -18,6 +18,7 @@ annotated-types==0.8.0
 anyio==4.15.1
     # via
     #   -r requirements.txt
+    #   httpx
     #   starlette
     #   watchfiles
 asyncpg==0.31.0
@@ -25,6 +26,8 @@ asyncpg==0.31.0
 certifi==2026.7.22
     # via
     #   -r requirements.txt
+    #   httpcore
+    #   httpx
     #   pyogrio
     #   pyproj
     #   requests
@@ -46,6 +49,8 @@ fastapi==0.135.2
     # via -r requirements.txt
 geoalchemy2==0.20.0
     # via -r requirements.txt
+geojson-pydantic==2.2.0
+    # via -r requirements.txt
 geopandas==1.1.4
     # via -r requirements.txt
 greenlet==3.3.2
@@ -55,15 +60,23 @@ greenlet==3.3.2
 h11==0.16.0
     # via
     #   -r requirements.txt
+    #   httpcore
     #   uvicorn
+httpcore==1.0.9
+    # via
+    #   -r requirements.txt
+    #   httpx
 httptools==0.8.0
     # via
     #   -r requirements.txt
     #   uvicorn
+httpx==0.28.1
+    # via -r requirements.txt
 idna==3.20
     # via
     #   -r requirements.txt
     #   anyio
+    #   httpx
     #   requests
 iniconfig==2.3.0
     # via pytest
@@ -109,6 +122,7 @@ pydantic==2.12.5
     # via
     #   -r requirements.txt
     #   fastapi
+    #   geojson-pydantic
     #   pydantic-settings
 pydantic-core==2.41.5
     # via
@@ -121,6 +135,8 @@ pygments==2.21.0
     #   -r requirements.txt
     #   pytest
     #   rich
+pyjwt==2.12.0
+    # via -r requirements.txt
 pyogrio==0.13.0
     # via
     #   -r requirements.txt
@@ -144,10 +160,6 @@ python-dotenv==1.2.3
     #   -r requirements.txt
     #   pydantic-settings
     #   uvicorn
-python-slugify==9.1.3
-    # via
-    #   -r requirements.test.in
-    #   -r requirements.txt
 pyyaml==6.0.3
     # via
     #   -r requirements.txt
@@ -183,10 +195,6 @@ starlette==1.6.0
     #   fastapi
 structlog==25.5.0
     # via -r requirements.txt
-text-unidecode==1.3
-    # via
-    #   -r requirements.txt
-    #   python-slugify
 typer==0.27.2
     # via -r requirements.txt
 typing-extensions==4.16.0

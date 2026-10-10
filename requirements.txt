@@ -38,6 +38,8 @@ fastapi==0.135.2
     # via -r requirements.in
 geoalchemy2==0.20.0
     # via -r requirements.in
+geojson-pydantic==2.2.0
+    # via -r requirements.in
 geopandas==1.1.4
     # via -r requirements.in
 greenlet==3.3.2
@@ -86,6 +88,7 @@ pydantic==2.12.5
     # via
     #   -r requirements.in
     #   fastapi
+    #   geojson-pydantic
     #   pydantic-settings
 pydantic-core==2.41.5
     # via pydantic

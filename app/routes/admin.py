@@ -174,7 +174,9 @@ async def create_regions(
 ) -> ReferenceRead:
     """Create a region linked to an existing country."""
     return await service.admin_create_region(
-        name=region_data.name, country_id=region_data.country_id
+        name=region_data.name,
+        country_id=region_data.country_id,
+        border=region_data.border,
     )
 
 

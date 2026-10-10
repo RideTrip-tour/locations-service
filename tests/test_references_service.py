@@ -600,7 +600,7 @@ def test_admin_create_region_linked_to_country(monkeypatch):
     )
 
     result = asyncio.run(
-        service.admin_create_region("Краснодарский край", country_id=1)
+        service.admin_create_region("Краснодарский край", country_id=1, border=None)
     )
 
     assert result.id == 1
@@ -624,7 +624,7 @@ async def test_admin_create_region_raises_404_when_country_missing(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await service.admin_create_region("Кубань", country_id=999)
+        await service.admin_create_region("Кубань", country_id=999, border=None)
 
     assert exc_info.value.status_code == 404
     assert "Country" in exc_info.value.detail
@@ -645,7 +645,7 @@ async def test_admin_create_region_raises_400_on_duplicate(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await service.admin_create_region("Кубань", country_id=1)
+        await service.admin_create_region("Кубань", country_id=1, border=None)
 
     assert exc_info.value.status_code == 400
     assert "already exists" in exc_info.value.detail
@@ -1385,18 +1385,79 @@ def test_create_countries_passes_name_to_service():
 def test_create_regions_passes_name_and_country_id():
     service = SimpleNamespace()
 
-    async def fake_admin_create_region(name, country_id):
+    async def fake_admin_create_region(name, country_id, border=None):
         service.name = name
         service.country_id = country_id
+        service.border = border
         return SimpleNamespace()
 
     service.admin_create_region = fake_admin_create_region
-    region_data = SimpleNamespace(name="Краснодарский край", country_id=1)
+    region_data = SimpleNamespace(name="Краснодарский край", country_id=1, border=None)
 
     asyncio.run(create_regions(service=service, region_data=region_data))
 
     assert service.name == "Краснодарский край"
     assert service.country_id == 1
+    assert service.border is None
+
+
+def test_create_regions_passes_border():
+    service = SimpleNamespace()
+    border = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+                },
+            }
+        ],
+    }
+
+    async def fake_admin_create_region(name, country_id, border=None):
+        service.border = border
+        return SimpleNamespace()
+
+    service.admin_create_region = fake_admin_create_region
+    region_data = SimpleNamespace(name="X", country_id=1, border=border)
+
+    asyncio.run(create_regions(service=service, region_data=region_data))
+
+    assert service.border == border
+
+
+def test_create_regions_returns_service_result():
+    service = SimpleNamespace()
+    expected = SimpleNamespace(id=1, name="Краснодарский край")
+
+    async def fake_admin_create_region(name, country_id, border=None):
+        return expected
+
+    service.admin_create_region = fake_admin_create_region
+    region_data = SimpleNamespace(name="X", country_id=1, border=None)
+
+    result = asyncio.run(create_regions(service=service, region_data=region_data))
+
+    assert result is expected
+
+
+@pytest.mark.asyncio
+async def test_create_regions_propagates_http_exception():
+    service = SimpleNamespace()
+
+    async def fake_admin_create_region(name, country_id, border=None):
+        raise HTTPException(status_code=409, detail="Slug already exists")
+
+    service.admin_create_region = fake_admin_create_region
+    region_data = SimpleNamespace(name="X", country_id=1, border=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_regions(service=service, region_data=region_data)
+
+    assert exc_info.value.status_code == 409
 
 
 def test_create_cities_passes_name_and_region_id():
