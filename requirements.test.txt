@@ -39,8 +39,6 @@ click==8.5.0
     # via
     #   -r requirements.txt
     #   uvicorn
-colorama==0.4.6
-    # via -r requirements.txt
 coverage[toml]==7.16.2
     # via pytest-cov
 fastapi==0.135.2
@@ -196,8 +194,6 @@ starlette==1.6.0
     # via
     #   -r requirements.txt
     #   fastapi
-structlog==25.5.0
-    # via -r requirements.txt
 typer==0.27.2
     # via -r requirements.txt
 typing-extensions==4.16.0
@@ -218,8 +214,6 @@ typing-inspection==0.4.4
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.4
-    # via -r requirements.txt
 urllib3==2.8.0
     # via
     #   -r requirements.txt
@@ -227,7 +221,9 @@ urllib3==2.8.0
 uvicorn[standard]==0.43.0
     # via -r requirements.txt
 uvloop==0.23.0
-    # via uvicorn
+    # via
+    #   -r requirements.txt
+    #   uvicorn
 watchfiles==1.2.0
     # via
     #   -r requirements.txt
