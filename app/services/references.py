@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 from decimal import Decimal
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -149,7 +149,7 @@ class ReferenceService:
             limit=limit,
             offset=offset,
             radius=Decimal(str(radius)),
-            items=[ReferenceRead.model_validate(city) for city in cities]
+            items=[ReferenceRead.model_validate(city) for city in cities],
         )
 
     async def list_regions(

@@ -46,7 +46,9 @@ def _normalize_text_values(value: StrFilter | None) -> list[str]:
     """Lowercase and split text filter values from scalar, list, or CSV input."""
     values: list[str] = []
     for item in _as_sequence(value):
-        values.extend(part.strip().lower() for part in str(item).split(",") if part.strip())
+        values.extend(
+            part.strip().lower() for part in str(item).split(",") if part.strip()
+        )
     return values
 
 

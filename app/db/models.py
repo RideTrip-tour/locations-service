@@ -6,6 +6,7 @@ from decimal import Decimal
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKBElement
 from geoalchemy2.shape import to_shape
+from shapely.geometry import Point
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -18,7 +19,6 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
-from shapely.geometry import Point
 
 from app.db.base import Base
 
