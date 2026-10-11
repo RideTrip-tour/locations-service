@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+from geojson_pydantic import Feature, FeatureCollection, MultiPolygon, Polygon
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.locations import LocationBase
 from app.schemas.mixins import PaginationMixin
 from app.schemas.references import ReferenceBase, ReferenceRead
+
+RegionBorder = FeatureCollection[Feature[Polygon | MultiPolygon, dict]]
 
 
 class AdminLocationBase(LocationBase):
@@ -64,7 +67,9 @@ class AdminReferenceCreate(ReferenceBase):
 
 class AdminRegionCreate(ReferenceBase):
     country_id: int
-    border: str
+    border: RegionBorder = Field(
+        description="GeoJSON FeatureCollection от geojson.io. Doc for FeatureCollection, https://turfjs.org/docs/api/featureCollection."
+    )
 
 
 class AdminCityCreate(ReferenceBase):

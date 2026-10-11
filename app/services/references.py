@@ -31,7 +31,7 @@ from app.db.models import (
     Region,
     Style,
 )
-from app.schemas.admin import AdminCityListResponse, AdminCityRead
+from app.schemas.admin import AdminCityListResponse, AdminCityRead, RegionBorder
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
     CityWithinRadius,
@@ -41,7 +41,7 @@ from app.schemas.references import (
 )
 from app.services.common import integrity_error_to_http, map_fk_violation_to_http
 from app.types import JunctionT, ModelT
-from app.utils.geo import make_coords
+from app.utils.geo import featurecollection_to_wkt_element, make_coords
 
 logger = logging.getLogger("location_service")
 
@@ -246,11 +246,26 @@ class ReferenceService:
     async def admin_create_country(self, name: str) -> ReferenceRead:
         return await self._create_reference(model=Country, name=name)
 
-    async def admin_create_region(self, name: str, country_id: int) -> ReferenceRead:
+    async def admin_create_region(
+        self, name: str, country_id: int, border: RegionBorder
+    ) -> ReferenceRead:
         """Create a region linked to a country."""
+        border_element = None
+        if border:
+            try:
+                border_element = featurecollection_to_wkt_element(border)
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"Invalid GeoJSON: {exc}",
+                )
         try:
             item = await admin_create_reference(
-                self.session, model=Region, name=name, country_id=country_id
+                self.session,
+                model=Region,
+                name=name,
+                country_id=country_id,
+                border=border_element,
             )
         except IntegrityError as exc:
             raise integrity_error_to_http(
