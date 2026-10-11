@@ -1,6 +1,14 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+from geoalchemy2.elements import WKBElement, WKTElement
+from geoalchemy2.shape import to_shape
+from shapely.geometry import MultiPolygon as ShapelyMultiPolygon
+from shapely.wkt import loads as wkt_loads
+
+from app.schemas.admin import RegionBorder
+from app.utils.geo import featurecollection_to_wkt_element, make_coords
 from scripts.seeds import constants as seed_constants
 from scripts.seeds import geo_data
 from tests.fakes import (
@@ -378,3 +386,122 @@ def test_load_cities_uses_distinct_on(cities_capture):
     )
     assert "DISTINCT ON (cs.name, r.id)" in sql
     assert "ST_DWithin" in sql
+
+
+def _square_polygon(minx: float, miny: float, size: float = 1.0) -> dict:
+    return {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [minx, miny],
+                [minx + size, miny],
+                [minx + size, miny + size],
+                [minx, miny + size],
+                [minx, miny],
+            ]
+        ],
+    }
+
+
+def _multi_square(*squares: dict) -> dict:
+    return {
+        "type": "MultiPolygon",
+        "coordinates": [sq["coordinates"] for sq in squares],
+    }
+
+
+def _feature(geometry: dict | None) -> dict:
+    return {"type": "Feature", "properties": {}, "geometry": geometry}
+
+
+def _collection(*geometries: dict | None) -> RegionBorder:
+    return RegionBorder.model_validate(
+        {
+            "type": "FeatureCollection",
+            "features": [_feature(g) for g in geometries],
+        }
+    )
+
+
+def test_make_coords_returns_wkb_point_with_srid_4326():
+    coords = make_coords(latitude=43.5855, longitude=39.7231)
+
+    assert isinstance(coords, WKBElement)
+    assert coords.srid == 4326
+
+
+def test_make_coords_uses_longitude_as_x_and_latitude_as_y():
+    coords = make_coords(latitude=43.5855, longitude=39.7231)
+
+    point = to_shape(coords)
+    assert point.x == 39.7231
+    assert point.y == 43.5855
+
+
+def test_single_polygon_feature_returns_multipolygon_wkt_with_srid_4326():
+    collection = _collection(_square_polygon(0, 0))
+
+    result = featurecollection_to_wkt_element(collection)
+
+    assert isinstance(result, WKTElement)
+    assert result.srid == 4326
+    assert result.data.startswith("MULTIPOLYGON")
+
+
+def test_single_polygon_feature_wkt_contains_one_polygon():
+    collection = _collection(_square_polygon(0, 0))
+
+    result = featurecollection_to_wkt_element(collection)
+    parsed = wkt_loads(result.data)
+
+    assert isinstance(parsed, ShapelyMultiPolygon)
+    assert len(parsed.geoms) == 1
+    assert parsed.geoms[0].area == 1.0
+
+
+def test_multipolygon_feature_is_flattened_into_parts():
+    multi = _multi_square(_square_polygon(0, 0), _square_polygon(2, 2))
+    collection = _collection(multi)
+
+    result = featurecollection_to_wkt_element(collection)
+    parsed = wkt_loads(result.data)
+
+    assert isinstance(parsed, ShapelyMultiPolygon)
+    assert len(parsed.geoms) == 2
+
+
+def test_multiple_features_are_merged_into_single_multipolygon():
+    collection = _collection(_square_polygon(0, 0), _square_polygon(5, 5))
+
+    result = featurecollection_to_wkt_element(collection)
+    parsed = wkt_loads(result.data)
+
+    assert isinstance(parsed, ShapelyMultiPolygon)
+    assert len(parsed.geoms) == 2
+
+
+def test_mixed_polygon_and_multipolygon_features():
+    multi = _multi_square(_square_polygon(10, 10), _square_polygon(20, 20))
+    collection = _collection(_square_polygon(0, 0), multi)
+
+    result = featurecollection_to_wkt_element(collection)
+    parsed = wkt_loads(result.data)
+
+    assert isinstance(parsed, ShapelyMultiPolygon)
+    assert len(parsed.geoms) == 3
+
+
+def test_raises_on_empty_feature_collection():
+    collection = RegionBorder.model_validate(
+        {"type": "FeatureCollection", "features": []}
+    )
+
+    with pytest.raises(ValueError, match="Empty FeatureCollection"):
+        featurecollection_to_wkt_element(collection)
+
+
+def test_raises_when_feature_geometry_is_none():
+    collection = _collection(None)
+
+    with pytest.raises(ValueError, match="Feature geometry is None"):
+        featurecollection_to_wkt_element(collection)
