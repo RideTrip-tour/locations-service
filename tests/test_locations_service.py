@@ -19,6 +19,12 @@ from app.crud.locations import (  # noqa E402
     admin_update_location as crud_admin_update_location,
     apply_location_filters,
     list_location_filter_options,
+    _normalize_int_values,
+    _normalize_text_values,
+    get_location_by_id,
+    get_reference_options,
+    _get_distance_to_city_km,
+    admin_delete_location_by_id,
 )
 from app.db.models import Location, LocationActivity, LocationLevel, LocationStyle
 from app.routes.query_params import (
@@ -58,6 +64,98 @@ class FakeSession:
 
     async def refresh(self, obj, attribute_names=None):
         raise AssertionError("FakeSession.refresh should be monkeypatched")
+
+
+def test_normalize_text_values_handles_scalar_list_and_csv():
+    assert _normalize_text_values("Ski") == ["ski"]
+    assert _normalize_text_values("ski, Freeride") == ["ski", "freeride"]
+    assert _normalize_text_values(["Ski", "Freeride"]) == ["ski", "freeride"]
+    assert _normalize_text_values(None) == []
+    assert _normalize_text_values("  ") == []
+
+
+def test_normalize_int_values_handles_scalar_list_and_csv():
+    assert _normalize_int_values(12) == [12]
+    assert _normalize_int_values("12, 15") == [12, 15]
+    assert _normalize_int_values([12, 15]) == [12, 15]
+    assert _normalize_int_values(None) == []
+
+
+def test_normalize_int_values_raises_on_invalid_csv():
+    with pytest.raises(ValueError):
+        _normalize_int_values("12, abc")
+
+
+@pytest.mark.asyncio
+async def test_get_location_by_id_returns_none_when_missing(monkeypatch):
+    session = FakeSession()
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await get_location_by_id(session, 1, only_active=False)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_location_by_id_filters_only_active(monkeypatch):
+    session = FakeSession()
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=postgresql.dialect()))
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await get_location_by_id(session, 1, only_active=True)
+    assert "locations.is_active IS true" in captured["sql"]
+
+    await get_location_by_id(session, 1, only_active=False)
+    assert "locations.is_active IS true" not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_get_reference_options_returns_sets(monkeypatch):
+    session = FakeSession()
+
+    async def fake_execute(statement):
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+        if "styles" in compiled:
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: ["mountain", "freeride"])
+            )
+        if "levels" in compiled:
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: ["beginner"])
+            )
+        raise AssertionError(compiled)
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await get_reference_options(session)
+
+    assert result == {
+        "styles": {"mountain", "freeride"},
+        "levels": {"beginner"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_distance_to_city_km_returns_none_when_no_row(monkeypatch):
+    session = FakeSession()
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await _get_distance_to_city_km(
+        session, location_coords="coords", city_id=1
+    )
+    assert result is None
 
 
 @pytest.mark.asyncio
@@ -733,6 +831,164 @@ async def test_admin_update_location_service_raises_404_when_location_missing(
     assert exc_info.value.detail == "Location not found"
 
 
+@pytest.mark.asyncio
+async def test_admin_update_location_returns_location_when_fields_set_is_empty(
+    monkeypatch,
+):
+    session = FakeSession()
+    location = make_location(id=1)
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        assert only_active is False
+        return location
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+
+    result = await crud_admin_update_location(session, 1, AdminLocationUpdate())
+
+    assert result is location
+    assert session.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_returns_none_when_missing(monkeypatch):
+    session = FakeSession()
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        return None
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+
+    result = await crud_admin_update_location(
+        session, 999, AdminLocationUpdate(name="X")
+    )
+    assert result is None
+    assert session.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_updates_only_provided_fields(monkeypatch):
+    session = FakeSession()
+    location = make_location(id=1, name="Old", description="Old desc")
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        return location
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalar_one=lambda: location)
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await crud_admin_update_location(
+        session, 1, AdminLocationUpdate(name="New")
+    )
+
+    assert result.name == "New"
+    assert result.description == "Old desc"
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_updates_activity_ids_when_provided(monkeypatch):
+    session = FakeSession()
+    location = make_location(id=1)
+    location.activities_rel = []
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        return location
+
+    async def fake_execute(statement):
+        compiled = str(statement.compile(dialect=postgresql.dialect()))
+        if "location_styles" in compiled or "styles" in compiled:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+        if "levels" in compiled:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+        return SimpleNamespace(scalar_one=lambda: location)
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await crud_admin_update_location(
+        session, 1, AdminLocationUpdate(activity_ids=[1, 2])
+    )
+
+    assert [a.activity_id for a in location.activities_rel] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_recomputes_distance_when_coords_change(
+    monkeypatch,
+):
+    session = FakeSession()
+    location = make_location(id=1, coords="old-coords", distance_to_city_km=10)
+    location.city_id = 1
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        return location
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalar_one=lambda: location)
+
+    async def fake_distance(db, *, location_coords, city_id):
+        return Decimal("4.500")
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+    monkeypatch.setattr("app.crud.locations._get_distance_to_city_km", fake_distance)
+
+    await crud_admin_update_location(
+        session, 1, AdminLocationUpdate(latitude=43.6, longitude=40.3)
+    )
+
+    assert location.distance_to_city_km == Decimal("4.500")
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_recomputes_distance_when_city_changes(
+    monkeypatch,
+):
+    session = FakeSession()
+    location = make_location(id=1, coords="coords", distance_to_city_km=10)
+    location.city_id = 1
+
+    new_city = SimpleNamespace(id=2, name="New city")
+
+    async def fake_get_location_by_id(db, location_id, *, only_active=True):
+        return location
+
+    async def fake_execute(statement):
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: new_city,
+            scalar_one=lambda: location,
+        )
+
+    async def fake_distance(db, *, location_coords, city_id):
+        assert city_id == 2
+        return Decimal("7.000")
+
+    monkeypatch.setattr(
+        "app.crud.locations.get_location_by_id", fake_get_location_by_id
+    )
+    monkeypatch.setattr(session, "execute", fake_execute)
+    monkeypatch.setattr("app.crud.locations._get_distance_to_city_km", fake_distance)
+
+    await crud_admin_update_location(session, 1, AdminLocationUpdate(city_id=2))
+
+    assert location.city_id == 2
+    assert location.distance_to_city_km == Decimal("7.000")
+
+
 def test_admin_create_location_computes_distance(monkeypatch):
     session = FakeSession()
     location_in = SimpleNamespace(
@@ -785,3 +1041,186 @@ def test_filter_within_radius_works_for_location():
     compiled = str(result.compile(dialect=postgresql.dialect()))
     assert "ST_DWithin" in compiled
     assert "locations.coords" in compiled
+
+
+@pytest.mark.asyncio
+async def test_ensure_relations_returns_early_when_no_relation_fields(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    called = {"options": 0}
+
+    async def fake_get_reference_options(db):
+        called["options"] += 1
+        return {}
+
+    monkeypatch.setattr(
+        "app.services.locations.get_reference_options", fake_get_reference_options
+    )
+
+    await service._ensure_relations_exist(AdminLocationUpdate(name="Only name"))
+
+    assert called["options"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ensure_relations_passes_when_all_values_exist(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_get_reference_options(db):
+        return {"styles": {"mountain", "freeride"}, "levels": {"beginner"}}
+
+    monkeypatch.setattr(
+        "app.services.locations.get_reference_options", fake_get_reference_options
+    )
+
+    location_in = AdminLocationUpdate(styles=["mountain"], levels=["beginner"])
+    await service._ensure_relations_exist(location_in)
+
+
+@pytest.mark.asyncio
+async def test_ensure_relations_raises_422_with_missing_styles_and_levels(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_get_reference_options(db):
+        return {"styles": {"mountain"}, "levels": {"beginner"}}
+
+    monkeypatch.setattr(
+        "app.services.locations.get_reference_options", fake_get_reference_options
+    )
+
+    location_in = AdminLocationUpdate(
+        styles=["mountain", "unknown_style"],
+        levels=["unknown_level"],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service._ensure_relations_exist(location_in)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == {
+        "styles": ["unknown_style"],
+        "levels": ["unknown_level"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_ensure_relations_ignores_fields_not_in_model_fields_set(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_get_reference_options(db):
+        return {"styles": {"mountain"}, "levels": {"beginner"}}
+
+    monkeypatch.setattr(
+        "app.services.locations.get_reference_options", fake_get_reference_options
+    )
+
+    await service._ensure_relations_exist(AdminLocationUpdate(name="Just name"))
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_location_success(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_delete(db, location_id):
+        assert db is session
+        assert location_id == 42
+        return True
+
+    monkeypatch.setattr(
+        "app.services.locations.admin_delete_location_by_id", fake_delete
+    )
+
+    await service.admin_delete_location(42)
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_location_raises_404_when_not_found(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    async def fake_delete(db, location_id):
+        return False
+
+    monkeypatch.setattr(
+        "app.services.locations.admin_delete_location_by_id", fake_delete
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.admin_delete_location(999)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Location not found"
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_location_returns_false_when_missing(monkeypatch):
+    session = FakeSession()
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await admin_delete_location_by_id(session, 999)
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_admin_update_location_service_raises_404_when_city_missing(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+
+    update = AdminLocationUpdate(city_id=999)
+
+    async def fake_ensure_relations(location_in):
+        return None
+
+    monkeypatch.setattr(service, "_ensure_relations_exist", fake_ensure_relations)
+
+    async def fake_crud_update(db, location_id, location_in):
+        raise CityNotFoundError(999)
+
+    monkeypatch.setattr(
+        "app.services.locations.admin_update_location", fake_crud_update
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.admin_update_location(1, update)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "City with id 999 not found."
+
+
+@pytest.mark.asyncio
+async def test_list_locations_in_radius_returns_wrapped_response(monkeypatch):
+    session = FakeSession()
+    service = LocationService(session)
+    location = make_location(id=1)
+
+    async def fake_list_within_radius(db, **kwargs):
+        assert db is session
+        assert kwargs["latitude"] == 43.6
+        assert kwargs["longitude"] == 40.3
+        assert kwargs["radius"] == 5.0
+        assert kwargs["limit"] == 10
+        assert kwargs["offset"] == 0
+        return [location], 1
+
+    monkeypatch.setattr(
+        "app.services.locations.list_locations_within_radius",
+        fake_list_within_radius,
+    )
+
+    result = await service.list_locations_in_radius(
+        latitude=43.6, longitude=40.3, radius=5.0, limit=10, offset=0
+    )
+
+    assert result.total == 1
+    assert result.radius == 5.0
+    assert result.limit == 10
+    assert len(result.items) == 1

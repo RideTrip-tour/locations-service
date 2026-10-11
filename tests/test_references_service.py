@@ -35,6 +35,8 @@ from app.crud.references import (
     admin_update_reference,
     get_city_names_by_country,
     get_city_names_by_region,
+    list_cities_with_coords,
+    list_cities_within_radius,
     list_locations_by_reference,
     list_references,
 )
@@ -1958,3 +1960,272 @@ def test_filter_within_radius_accepts_float_km():
         )
     )
     assert "1500" in compiled
+
+
+def test_apply_fk_filter_adds_where_when_value_provided():
+    from app.crud.references import _apply_fk_filter
+
+    statement = select(City)
+    result = _apply_fk_filter(statement, City.region_id, 5)
+    compiled = str(result.compile(dialect=None))
+
+    assert "cities.region_id = " in compiled
+
+
+def test_apply_fk_filter_skips_when_value_none():
+    from app.crud.references import _apply_fk_filter
+
+    statement = select(City)
+    result = _apply_fk_filter(statement, City.region_id, None)
+    compiled = str(result.compile(dialect=None))
+
+    assert "cities.region_id = " not in compiled
+
+
+def test_crud_list_cities_filters_by_region_and_name(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Сочи")
+    captured = {}
+
+    async def fake_scalar(statement):
+        captured["total_sql"] = str(statement.compile(dialect=None))
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    from app.crud.references import list_cities as crud_list_cities
+
+    items, total = asyncio.run(
+        crud_list_cities(session, region_id=5, name="соч", limit=10, offset=0)
+    )
+
+    assert list(items) == [city]
+    assert total == 1
+    assert "cities.region_id = " in captured["sql"]
+    assert "lower(cities.name) LIKE" in captured["sql"]
+
+
+def test_crud_list_cities_without_filters(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Сочи")
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    from app.crud.references import list_cities as crud_list_cities
+
+    items, total = asyncio.run(crud_list_cities(session))
+
+    assert list(items) == [city]
+    assert total == 1
+    assert "cities.region_id =" not in captured["sql"]
+
+
+def test_crud_list_cities_filters_by_id_list(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=3, name="Сочи")
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    from app.crud.references import list_cities as crud_list_cities
+
+    items, total = asyncio.run(crud_list_cities(session, item_id=[3, 4]))
+
+    assert list(items) == [city]
+    assert total == 1
+    assert "cities.id IN" in captured["sql"]
+
+
+def test_crud_list_regions_filters_by_country_and_name(monkeypatch):
+    session = FakeSession()
+    region = make_reference(Region, id=1, name="Краснодарский край")
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [region]))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    from app.crud.references import list_regions as crud_list_regions
+
+    items, total = asyncio.run(crud_list_regions(session, country_id=1, name="крас"))
+
+    assert list(items) == [region]
+    assert total == 1
+    assert "regions.country_id = " in captured["sql"]
+    assert "lower(regions.name) LIKE" in captured["sql"]
+
+
+def test_crud_list_regions_without_country_id(monkeypatch):
+    session = FakeSession()
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 0
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    from app.crud.references import list_regions as crud_list_regions
+
+    items, total = asyncio.run(crud_list_regions(session))
+
+    assert list(items) == []
+    assert total == 0
+    assert "regions.country_id = " not in captured["sql"]
+
+
+def test_crud_list_cities_with_coords_returns_mappings(monkeypatch):
+    session = FakeSession()
+    row = SimpleNamespace(
+        _mapping={"id": 1, "name": "Сочи", "latitude": 43.5, "longitude": 39.7}
+    )
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=postgresql.dialect()))
+        return [row]
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    items, total = asyncio.run(
+        list_cities_with_coords(session, region_id=1, name="соч")
+    )
+
+    assert total == 1
+    assert items == [row._mapping]
+    assert "ST_Y" in captured["sql"]
+    assert "ST_X" in captured["sql"]
+    assert "cities.region_id = " in captured["sql"]
+
+
+def test_crud_list_cities_with_coords_without_filters(monkeypatch):
+    session = FakeSession()
+
+    async def fake_scalar(statement):
+        return 0
+
+    async def fake_execute(statement):
+        return []
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    items, total = asyncio.run(list_cities_with_coords(session))
+
+    assert items == []
+    assert total == 0
+
+
+def test_crud_list_cities_with_coords_filters_by_id_list(monkeypatch):
+    session = FakeSession()
+    row = SimpleNamespace(
+        _mapping={"id": 3, "name": "Сочи", "latitude": 43.5, "longitude": 39.7}
+    )
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return [row]
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    items, total = asyncio.run(list_cities_with_coords(session, item_id=[3, 4]))
+
+    assert total == 1
+    assert items == [row._mapping]
+    assert "cities.id IN" in captured["sql"]
+
+
+def test_crud_list_cities_within_radius_applies_st_dwithin_and_region(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Сочи")
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 1
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=postgresql.dialect()))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    items, total = asyncio.run(
+        list_cities_within_radius(
+            session,
+            region_id=5,
+            latitude=43.6,
+            longitude=40.3,
+            radius=10.0,
+        )
+    )
+
+    assert list(items) == [city]
+    assert total == 1
+    assert "ST_DWithin" in captured["sql"]
+    assert "cities.region_id = " in captured["sql"]
+
+
+def test_crud_list_cities_within_radius_without_region(monkeypatch):
+    session = FakeSession()
+    captured = {}
+
+    async def fake_scalar(statement):
+        return 0
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=postgresql.dialect()))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+
+    monkeypatch.setattr(session, "scalar", fake_scalar)
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    items, total = asyncio.run(
+        list_cities_within_radius(session, latitude=43.6, longitude=40.3, radius=10.0)
+    )
+
+    assert list(items) == []
+    assert total == 0
+    assert "ST_DWithin" in captured["sql"]
+    assert "cities.region_id = " not in captured["sql"]

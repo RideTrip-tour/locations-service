@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,7 +128,11 @@ class LocationService:
             offset=offset,
         )
         return LocationWithinRadius(
-            total=total, limit=limit, offset=offset, radius=radius, items=locations
+            total=total,
+            limit=limit,
+            offset=offset,
+            radius=Decimal(str(radius)),
+            items=[LocationRead.model_validate(location) for location in locations],
         )
 
     async def _get_location(self, location_id: int, *, only_active: bool = True):
@@ -169,7 +174,10 @@ class LocationService:
             offset=offset,
         )
         return LocationListResponse(
-            items=locations, total=total, limit=limit, offset=offset
+            items=[LocationRead.model_validate(location) for location in locations],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     @staticmethod

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
@@ -144,7 +145,11 @@ class ReferenceService:
             offset=offset,
         )
         return CityWithinRadius(
-            total=total, limit=limit, offset=offset, radius=radius, items=cities
+            total=total,
+            limit=limit,
+            offset=offset,
+            radius=Decimal(str(radius)),
+            items=[ReferenceRead.model_validate(city) for city in cities],
         )
 
     async def list_regions(
@@ -320,7 +325,7 @@ class ReferenceService:
     async def admin_update_city(
         self, item_id: int, name: str, region_id: int | None
     ) -> ReferenceRead:
-        fields = {"name": name}
+        fields: dict[str, str | int] = {"name": name}
         if region_id is not None:
             fields["region_id"] = region_id
         updated = await self._update_reference(model=City, item_id=item_id, **fields)
@@ -329,7 +334,7 @@ class ReferenceService:
     async def admin_update_region(
         self, item_id: int, name: str, country_id: int | None
     ) -> ReferenceRead:
-        fields = {"name": name}
+        fields: dict[str, str | int] = {"name": name}
         if country_id is not None:
             fields["country_id"] = country_id
         updated = await self._update_reference(model=Region, item_id=item_id, **fields)
