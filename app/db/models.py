@@ -6,6 +6,7 @@ from decimal import Decimal
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKBElement
 from geoalchemy2.shape import to_shape
+from shapely.geometry import Point
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -22,6 +23,13 @@ from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 from app.db.base import Base
 
 CASCADE_DELETE_ORPHAN = "all, delete-orphan"
+
+
+def _as_point(coords: WKBElement) -> Point:
+    point = to_shape(coords)
+    if not isinstance(point, Point):
+        raise TypeError(f"Expected Point, got {type(point).__name__}")
+    return point
 
 
 class LocationChildMixin:
@@ -145,11 +153,11 @@ class City(ReferenceMixin, Base):
 
     @property
     def latitude(self) -> float:
-        return to_shape(self.coords).y
+        return _as_point(self.coords).y
 
     @property
     def longitude(self) -> float:
-        return to_shape(self.coords).x
+        return _as_point(self.coords).x
 
     __table_args__ = (
         UniqueConstraint("name", "region_id", name="uq_city_name_region"),
@@ -231,8 +239,8 @@ class Location(Base):
 
     @property
     def latitude(self) -> float:
-        return to_shape(self.coords).y
+        return _as_point(self.coords).y
 
     @property
     def longitude(self) -> float:
-        return to_shape(self.coords).x
+        return _as_point(self.coords).x
