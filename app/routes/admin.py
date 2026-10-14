@@ -147,6 +147,17 @@ async def read_cities(
     )
 
 
+@admin_references_router.get("/cities_by_country", response_model=ReferenceRead)
+async def read_city_by_country(
+    service: ReferenceServiceDep,
+    country_name: ReferenceNameQuery,
+    city_name: ReferenceNameQuery,
+):
+    return await service.list_city_by_country(
+        country_name=country_name, city_name=city_name
+    )
+
+
 @admin_references_router.post("/styles", status_code=status.HTTP_201_CREATED)
 async def create_style(
     service: ReferenceServiceDep, style_data: AdminReferenceCreate
