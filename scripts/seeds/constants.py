@@ -4,6 +4,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "geo_data"
 
 SUPPORTED_COUNTRIES: list[dict[str, str]] = [
     {"code": "RU", "name": "Россия", "name_en": "Russia", "gb_open": "RUS"},
+    {"code": "TR", "name": "Турция", "name_en": "Turkey", "gb_open": "TUR"},
+    {"code": "GE", "name": "Грузия", "name_en": "Georgia", "gb_open": "GEO"},
 ]
 
 REGIONS_POLYGON_URL = "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/{gb_open}/ADM1/geoBoundaries-{gb_open}-ADM1.geojson"
