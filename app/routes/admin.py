@@ -26,6 +26,7 @@ from app.schemas.admin import (
     AdminReferenceCreate,
     AdminRegionCreate,
     AdminRegionUpdate,
+    CityWithRegionList,
 )
 from app.schemas.locations import LocationFilterOptions
 from app.schemas.references import ReferenceLocationsResponse, ReferenceRead
@@ -147,7 +148,7 @@ async def read_cities(
     )
 
 
-@admin_references_router.get("/cities_by_country", response_model=ReferenceRead)
+@admin_references_router.get("/cities_by_country", response_model=CityWithRegionList)
 async def read_city_by_country(
     service: ReferenceServiceDep,
     country_name: ReferenceNameQuery,

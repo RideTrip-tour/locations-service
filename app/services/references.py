@@ -33,7 +33,13 @@ from app.db.models import (
     Region,
     Style,
 )
-from app.schemas.admin import AdminCityListResponse, AdminCityRead, RegionBorder
+from app.schemas.admin import (
+    AdminCityListResponse,
+    AdminCityRead,
+    CityWithRegionList,
+    CityWithRegionRead,
+    RegionBorder,
+)
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
     CityWithinRadius,
@@ -159,15 +165,19 @@ class ReferenceService:
         country_name: str | None = None,
         city_name: str | None = None,
     ):
-        city = await crud_list_city_by_country(
+        cities = await crud_list_city_by_country(
             self.session, country_name=country_name, city_name=city_name
         )
-        if city is None:
+        if not cities:
             logger.warning("City not found")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="City not found"
             )
-        return city
+        items = [
+            CityWithRegionRead(id=city.id, name=city.name, region_name=city.region.name)
+            for city in cities
+        ]
+        return CityWithRegionList(items=items)
 
     async def list_regions(
         self,

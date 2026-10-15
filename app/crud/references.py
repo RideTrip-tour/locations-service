@@ -8,7 +8,7 @@ from geoalchemy2.functions import ST_X, ST_Y
 from sqlalchemy import Select, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import defer
+from sqlalchemy.orm import defer, joinedload
 
 from app.crud.common import filter_within_radius, load_location_options, paginate
 from app.db.models import City, Country, Location, Region
@@ -149,13 +149,14 @@ async def list_city_by_country(
     session: AsyncSession,
     country_name: str | None = None,
     city_name: str | None = None,
-):
+) -> list[City]:
     clean_country_name = country_name.strip() if country_name is not None else None
     clean_city_name = city_name.strip() if city_name is not None else None
     statement = (
         select(City)
         .join(Region, City.region_id == Region.id)
         .join(Country, Region.country_id == Country.id)
+        .options(joinedload(City.region).joinedload(Region.country))
     )
 
     if clean_country_name:
@@ -163,9 +164,8 @@ async def list_city_by_country(
     if clean_city_name:
         statement = statement.where(City.name.ilike(clean_city_name))
 
-    statement = statement.limit(1)
     result = await session.execute(statement)
-    return result.scalar_one_or_none()
+    return list(result.scalars().all())
 
 
 async def list_regions(
