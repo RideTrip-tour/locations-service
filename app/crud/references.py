@@ -149,7 +149,7 @@ async def list_city_by_country(
     session: AsyncSession,
     country_name: str | None = None,
     city_name: str | None = None,
-) -> list[City]:
+) -> Sequence[City]:
     clean_country_name = country_name.strip() if country_name is not None else None
     clean_city_name = city_name.strip() if city_name is not None else None
     statement = (
@@ -165,7 +165,7 @@ async def list_city_by_country(
         statement = statement.where(City.name.ilike(clean_city_name))
 
     result = await session.execute(statement)
-    return list(result.scalars().all())
+    return result.scalars().all()
 
 
 async def list_regions(
