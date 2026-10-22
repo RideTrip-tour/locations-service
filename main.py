@@ -2,9 +2,9 @@ import logging.config
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from internal_middleware import build_user_context_middleware
 
 from app.client.gateway_client import GatewayClient
-from app.middlerware.request_context import user_context_middleware
 from app.routes.admin import admin_references_router
 from app.routes.admin import router as admin_location_router
 from app.routes.locations import router as locations_router
@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
         openapi_url="/api/locations/openapi.json",
     )
 
-    app.middleware("http")(user_context_middleware)
+    app.middleware("http")(build_user_context_middleware(logger=logger))
 
     @app.get("/api/locations/health")
     async def health_check():

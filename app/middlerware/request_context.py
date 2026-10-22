@@ -1,3 +1,4 @@
+# depricated 22.10.26
 import base64
 import json
 import logging
