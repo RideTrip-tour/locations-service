@@ -42,7 +42,9 @@ click==8.5.0
 coverage[toml]==7.16.2
     # via pytest-cov
 fastapi==0.135.2
-    # via -r requirements.txt
+    # via
+    #   -r requirements.txt
+    #   internal-middleware
 geoalchemy2==0.20.0
     # via -r requirements.txt
 geojson-pydantic==2.2.0
@@ -76,6 +78,8 @@ idna==3.20
     #   requests
 iniconfig==2.3.0
     # via pytest
+internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@1a1e4255964d9128360b19c3e9b52cae098a7b0a
+    # via -r requirements.txt
 mako==1.4.1
     # via
     #   -r requirements.txt

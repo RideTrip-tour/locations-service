@@ -30,10 +30,6 @@ charset-normalizer==3.5.1
     # via requests
 click==8.5.0
     # via uvicorn
-colorama==0.4.6
-    # via
-    #   typer
-    #   uvicorn
 fastapi==0.135.2
     # via
     #   -r requirements.in
@@ -61,7 +57,7 @@ idna==3.20
     #   anyio
     #   httpx
     #   requests
-internal-middleware @ git+ssh://git@github.com/RideTrip-tour/middlewares.git@1a1e4255964d9128360b19c3e9b52cae098a7b0a
+internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@1a1e4255964d9128360b19c3e9b52cae098a7b0a
     # via -r requirements.in
 mako==1.4.1
     # via alembic
@@ -148,12 +144,12 @@ typing-inspection==0.4.4
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.5
-    # via pandas
 urllib3==2.8.0
     # via requests
 uvicorn[standard]==0.43.0
     # via -r requirements.in
+uvloop==0.23.0
+    # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
 websockets==17.1
