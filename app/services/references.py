@@ -21,6 +21,7 @@ from app.crud.references import (
     list_references,
 )
 from app.crud.references import list_cities as crud_list_cities
+from app.crud.references import list_city_by_country as crud_list_city_by_country
 from app.crud.references import list_regions as crud_list_regions
 from app.db.database import get_async_session
 from app.db.models import (
@@ -32,7 +33,13 @@ from app.db.models import (
     Region,
     Style,
 )
-from app.schemas.admin import AdminCityListResponse, AdminCityRead, RegionBorder
+from app.schemas.admin import (
+    AdminCityListResponse,
+    AdminCityRead,
+    CityWithRegionList,
+    CityWithRegionRead,
+    RegionBorder,
+)
 from app.schemas.locations import LocationRead
 from app.schemas.references import (
     CityWithinRadius,
@@ -151,6 +158,26 @@ class ReferenceService:
             radius=Decimal(str(radius)),
             items=[ReferenceRead.model_validate(city) for city in cities],
         )
+
+    async def list_city_by_country(
+        self,
+        *,
+        country_name: str | None = None,
+        city_name: str | None = None,
+    ):
+        cities = await crud_list_city_by_country(
+            self.session, country_name=country_name, city_name=city_name
+        )
+        if not cities:
+            logger.warning("City not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="City not found"
+            )
+        items = [
+            CityWithRegionRead(id=city.id, name=city.name, region_name=city.region.name)
+            for city in cities
+        ]
+        return CityWithRegionList(items=items)
 
     async def list_regions(
         self,

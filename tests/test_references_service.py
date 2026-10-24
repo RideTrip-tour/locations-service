@@ -37,6 +37,7 @@ from app.crud.references import (
     get_city_names_by_region,
     list_cities_with_coords,
     list_cities_within_radius,
+    list_city_by_country,
     list_locations_by_reference,
     list_references,
 )
@@ -2229,3 +2230,179 @@ def test_crud_list_cities_within_radius_without_region(monkeypatch):
     assert total == 0
     assert "ST_DWithin" in captured["sql"]
     assert "cities.region_id = " not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_exact_match(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=42, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await list_city_by_country(session, country_name="Россия", city_name="Уфа")
+
+    assert list(result) == [city]
+    assert "JOIN regions" in captured["sql"]
+    assert "JOIN countries" in captured["sql"]
+    assert "lower(countries.name) LIKE" in captured["sql"]
+    assert "lower(cities.name) LIKE" in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_is_case_insensitive(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=42, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, country_name="россия", city_name="уфа")
+
+    assert "lower(countries.name) LIKE" in captured["sql"]
+    assert "lower(cities.name) LIKE" in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_does_not_use_wildcards(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=42, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(
+            statement.compile(
+                dialect=None,
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, country_name="Россия", city_name="Уфа")
+
+    assert "'Уфа'" in captured["sql"]
+    assert "'%Уфа%'" not in captured["sql"]
+    assert "'%Россия%'" not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_strips_whitespace(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=42, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(
+            statement.compile(
+                dialect=None,
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, country_name="  Россия  ", city_name="  Уфа  ")
+
+    assert "'  Россия  '" not in captured["sql"]
+    assert "'  Уфа  '" not in captured["sql"]
+    assert "'Россия'" in captured["sql"]
+    assert "'Уфа'" in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_returns_empty_when_missing(monkeypatch):
+    session = FakeSession()
+
+    async def fake_execute(statement):
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=list))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    result = await list_city_by_country(
+        session, country_name="Россия", city_name="Атлантида"
+    )
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_only_country(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, country_name="Россия")
+
+    assert "lower(countries.name) LIKE" in captured["sql"]
+    assert "lower(cities.name) LIKE" not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_only_city(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, city_name="Уфа")
+
+    assert "lower(cities.name) LIKE" in captured["sql"]
+    assert "lower(countries.name) LIKE" not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_without_filters(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session)
+
+    assert "lower(countries.name) LIKE" not in captured["sql"]
+    assert "lower(cities.name) LIKE" not in captured["sql"]
+
+
+@pytest.mark.asyncio
+async def test_list_city_by_country_empty_string_no_filter(monkeypatch):
+    session = FakeSession()
+    city = make_reference(City, id=1, name="Уфа")
+    captured = {}
+
+    async def fake_execute(statement):
+        captured["sql"] = str(statement.compile(dialect=None))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [city]))
+
+    monkeypatch.setattr(session, "execute", fake_execute)
+
+    await list_city_by_country(session, country_name="", city_name="   ")
+
+    assert "lower(countries.name) LIKE" not in captured["sql"]
+    assert "lower(cities.name) LIKE" not in captured["sql"]

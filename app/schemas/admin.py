@@ -95,3 +95,11 @@ class AdminCityRead(ReferenceRead):
 
 class AdminCityListResponse(PaginationMixin):
     items: list[AdminCityRead]
+
+
+class CityWithRegionRead(ReferenceRead):
+    region_name: str
+
+
+class CityWithRegionList(BaseModel):
+    items: list[CityWithRegionRead]
