@@ -1,5 +1,3 @@
-"""Тесты на GatewayClient — то, что он добавляет поверх InitialClient."""
-
 import time
 
 import jwt
