@@ -39,6 +39,12 @@ click==8.5.0
     # via
     #   -r requirements.txt
     #   uvicorn
+colorama==0.4.6
+    # via
+    #   -r requirements.txt
+    #   pytest
+    #   typer
+    #   uvicorn
 coverage[toml]==7.16.2
     # via pytest-cov
 fastapi==0.135.2
@@ -69,7 +75,9 @@ httptools==0.8.0
     #   -r requirements.txt
     #   uvicorn
 httpx==0.28.1
-    # via -r requirements.txt
+    # via
+    #   -r requirements.txt
+    #   initial-client
 idna==3.20
     # via
     #   -r requirements.txt
@@ -78,7 +86,9 @@ idna==3.20
     #   requests
 iniconfig==2.3.0
     # via pytest
-internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@c4f475635f794460334a704694fd2d10ff7c1266
+initial-client @ git+https://github.com/RideTrip-tour/internal_client.git@09b65936ef1e61b0666f3041fdfe43584be249af
+    # via -r requirements.txt
+internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@1d944750324410930c4e4fd69c30e77ceba72d3e
     # via -r requirements.txt
 mako==1.4.1
     # via
@@ -137,8 +147,10 @@ pygments==2.21.0
     #   -r requirements.txt
     #   pytest
     #   rich
-pyjwt==2.12.0
-    # via -r requirements.txt
+pyjwt==2.15.1
+    # via
+    #   -r requirements.txt
+    #   initial-client
 pyogrio==0.13.0
     # via
     #   -r requirements.txt
@@ -218,16 +230,16 @@ typing-inspection==0.4.4
     #   fastapi
     #   pydantic
     #   pydantic-settings
+tzdata==2026.5
+    # via
+    #   -r requirements.txt
+    #   pandas
 urllib3==2.8.0
     # via
     #   -r requirements.txt
     #   requests
 uvicorn[standard]==0.43.0
     # via -r requirements.txt
-uvloop==0.23.0
-    # via
-    #   -r requirements.txt
-    #   uvicorn
 watchfiles==1.2.0
     # via
     #   -r requirements.txt
