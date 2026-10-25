@@ -9,6 +9,7 @@ class CityNotFoundError(Exception):
         super().__init__(f"City with id {city_id} not found")
 
 
+# depricated 25.10.26
 class UserContextMissingError(Exception):
     """Raised when user claims are not available."""
 

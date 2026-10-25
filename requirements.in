@@ -8,10 +8,11 @@ httpx==0.28.1
 psycopg2-binary==2.9.11
 pydantic==2.12.5
 pydantic-settings==2.13.1
-PyJWT==2.12.0
+PyJWT==2.15.1
 requests==2.34.2
 shapely==2.1.2
 sqlalchemy==2.0.49
 typer==0.27.2
 uvicorn[standard]==0.43.0
-git+https://github.com/RideTrip-tour/middlewares.git@c4f475635f794460334a704694fd2d10ff7c1266#egg=internal-middleware
+git+https://github.com/RideTrip-tour/middlewares.git@1d944750324410930c4e4fd69c30e77ceba72d3e#egg=internal-middleware
+git+https://github.com/RideTrip-tour/internal_client.git@09b65936ef1e61b0666f3041fdfe43584be249af#egg=initial-client
