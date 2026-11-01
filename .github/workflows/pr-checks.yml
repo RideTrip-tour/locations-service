@@ -24,7 +24,7 @@ jobs:
   
   alembic_check:
     needs: [ruff, mypy, tests]
-    uses: RideTrip-tour/ci-templates/.github/workflows/python-alembic-check.yml@7cd4ef9d2c2d3e28bf6694fec0629caaf0b803f6
+    uses: RideTrip-tour/ci-templates/.github/workflows/python-alembic-check.yml@ee4b9055749fcb6a691a3e3f916de29f6198ec96
   
   notify:
     needs: [ruff, tests, mypy, alembic_check]
