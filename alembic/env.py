@@ -23,14 +23,15 @@ config.set_main_option(
 
 
 def include_object(object, name, type_, reflected, compare_to):
-    if type_ == "table" and name in {
-        "spatial_ref_sys",
-        "topology",
-        "layer",
-    }:
-        return False
-
-    return True
+    return not (
+        type_ == "table"
+        and name
+        in {
+            "spatial_ref_sys",
+            "topology",
+            "layer",
+        }
+    )
 
 
 def run_migrations_offline() -> None:
