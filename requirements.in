@@ -5,6 +5,8 @@ GeoAlchemy2==0.20.0
 geojson-pydantic==2.2.0
 geopandas==1.1.4
 httpx==0.28.1
+internal-client @ git+https://github.com/RideTrip-tour/internal_client.git@02beab80fa79eb6533f2be4f822e455b9f996cfe
+internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@a73f358077acfa0855d9e901a0b4ebe1015b298f
 psycopg2-binary==2.9.11
 pydantic==2.12.5
 pydantic-settings==2.13.1
@@ -14,5 +16,3 @@ shapely==2.1.2
 sqlalchemy==2.0.49
 typer==0.27.2
 uvicorn[standard]==0.43.0
-internal-middleware @ git+https://github.com/RideTrip-tour/middlewares.git@a7af65f6a7d0e509691e89e511deee36c140d0d0
-initial-client @ git+https://github.com/RideTrip-tour/internal_client.git@126ac55a179faddb9daffa6d42adc5f74b16523c
