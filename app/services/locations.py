@@ -208,6 +208,7 @@ class LocationService:
     async def admin_create_location(
         self, location_in: AdminLocationCreate
     ) -> AdminLocationRead:
+        await self._ensure_relations_exist(location_in)
         try:
             location = await admin_create_location(self.session, location_in)
         except CityNotFoundError as exc:
