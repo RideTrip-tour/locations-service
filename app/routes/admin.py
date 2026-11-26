@@ -98,7 +98,7 @@ async def delete_location_by_id(service: LocationServiceDep, location_id: int):
 
 
 admin_references_router = APIRouter(
-    prefix="/api/admin/references", tags=["Admin References"]
+    prefix="/api/admin/locations/references", tags=["Admin References"]
 )
 
 
