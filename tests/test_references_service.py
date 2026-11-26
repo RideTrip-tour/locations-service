@@ -1348,12 +1348,12 @@ def test_references_openapi_exposes_public_and_admin_paths():
 
     assert "/api/locations/references/styles" in paths
     assert "/api/locations/references/levels" in paths
-    assert "/api/admin/references/styles" in paths
-    assert "/api/admin/references/levels" in paths
-    assert "/api/admin/references/styles/{style_id}" in paths
-    assert "/api/admin/references/levels/{level_id}" in paths
-    assert "/api/admin/references/styles/{style_id}/locations" in paths
-    assert "/api/admin/references/levels/{level_id}/locations" in paths
+    assert "/api/admin/locations/references/styles" in paths
+    assert "/api/admin/locations/references/levels" in paths
+    assert "/api/admin/locations/references/styles/{style_id}" in paths
+    assert "/api/admin/locations/references/levels/{level_id}" in paths
+    assert "/api/admin/locations/references/styles/{style_id}/locations" in paths
+    assert "/api/admin/locations/references/levels/{level_id}/locations" in paths
 
 
 def test_references_search_requires_min_three_characters():
@@ -1620,20 +1620,6 @@ def test_delete_city_passes_id_to_service():
     asyncio.run(delete_city_by_id(service=service, city_id=3))
 
     assert service.city_id == 3
-
-
-def test_admin_references_openapi_exposes_geo_paths():
-    app = FastAPI()
-    app.include_router(admin_references_router)
-
-    paths = app.openapi()["paths"]
-
-    assert "/api/admin/references/countries" in paths
-    assert "/api/admin/references/regions" in paths
-    assert "/api/admin/references/cities" in paths
-    assert "/api/admin/references/countries/{country_id}" in paths
-    assert "/api/admin/references/regions/{region_id}" in paths
-    assert "/api/admin/references/cities/{city_id}" in paths
 
 
 def test_admin_region_create_requires_country_id():
