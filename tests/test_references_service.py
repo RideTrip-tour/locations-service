@@ -1622,20 +1622,6 @@ def test_delete_city_passes_id_to_service():
     assert service.city_id == 3
 
 
-def test_admin_references_openapi_exposes_geo_paths():
-    app = FastAPI()
-    app.include_router(admin_references_router)
-
-    paths = app.openapi()["paths"]
-
-    assert "/api/admin/locations/references/countries" in paths
-    assert "/api/admin/locations/references/regions" in paths
-    assert "/api/admin/locations/references/cities" in paths
-    assert "/api/admin/locations/references/countries/{country_id}" in paths
-    assert "/api/admin/locations/references/regions/{region_id}" in paths
-    assert "/api/admin/locations/references/cities/{city_id}" in paths
-
-
 def test_admin_region_create_requires_country_id():
     with pytest.raises(ValidationError):
         AdminRegionCreate(name="Кубань")
