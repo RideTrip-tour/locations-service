@@ -24,7 +24,7 @@ from app.crud.locations import (  # noqa E402
     get_location_by_id,
     get_reference_options,
     _get_distance_to_city_km,
-    admin_delete_location_by_id,
+    admin_delete_location_by_id_without_commit,
 )
 from app.db.models import Location, LocationActivity, LocationLevel, LocationStyle
 from app.routes.query_params import (
@@ -1121,6 +1121,11 @@ async def test_ensure_relations_ignores_fields_not_in_model_fields_set(monkeypat
     await service._ensure_relations_exist(AdminLocationUpdate(name="Just name"))
 
 
+from unittest.mock import AsyncMock
+
+import pytest
+
+
 @pytest.mark.asyncio
 async def test_admin_delete_location_success(monkeypatch):
     session = FakeSession()
@@ -1131,11 +1136,21 @@ async def test_admin_delete_location_success(monkeypatch):
         assert location_id == 42
         return True
 
+    publish_mock = AsyncMock()
+
     monkeypatch.setattr(
-        "app.services.locations.admin_delete_location_by_id", fake_delete
+        "app.services.locations.admin_delete_location_by_id_without_commit",
+        fake_delete,
+    )
+    monkeypatch.setattr(
+        service.task_publisher,
+        "delete_favorite_locations",
+        publish_mock,
     )
 
     await service.admin_delete_location(42)
+
+    publish_mock.assert_awaited_once_with(location_id=42)
 
 
 @pytest.mark.asyncio
@@ -1147,7 +1162,7 @@ async def test_admin_delete_location_raises_404_when_not_found(monkeypatch):
         return False
 
     monkeypatch.setattr(
-        "app.services.locations.admin_delete_location_by_id", fake_delete
+        "app.services.locations.admin_delete_location_by_id_without_commit", fake_delete
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -1166,7 +1181,7 @@ async def test_admin_delete_location_returns_false_when_missing(monkeypatch):
 
     monkeypatch.setattr(session, "execute", fake_execute)
 
-    result = await admin_delete_location_by_id(session, 999)
+    result = await admin_delete_location_by_id_without_commit(session, 999)
     assert result is False
 
 

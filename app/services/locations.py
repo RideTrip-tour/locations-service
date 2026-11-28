@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.locations import (
     admin_create_location,
-    admin_delete_location_by_id,
+    admin_delete_location_by_id_without_commit,
     admin_update_location,
     get_location_by_id,
     get_reference_options,
@@ -18,6 +18,7 @@ from app.crud.locations import (
 )
 from app.db.database import get_async_session
 from app.exceptions import CityNotFoundError
+from app.publishers.dependencies import task_publisher
 from app.schemas.admin import (
     AdminLocationCreate,
     AdminLocationRead,
@@ -41,6 +42,7 @@ LOCATION_NOT_FOUND = "Location not found"
 class LocationService:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.task_publisher = task_publisher
 
     async def get_location(
         self,
@@ -248,12 +250,34 @@ class LocationService:
         return AdminLocationRead.model_validate(updated_location)
 
     async def admin_delete_location(self, location_id: int) -> None:
-        deleted = await admin_delete_location_by_id(self.session, location_id)
-        if not deleted:
-            logger.warning("Location with id %s is not found for deletion", location_id)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
+        try:
+            deleted = await admin_delete_location_by_id_without_commit(
+                self.session, location_id
             )
+            if not deleted:
+                logger.warning(
+                    "Location with id %s is not found for deletion", location_id
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=LOCATION_NOT_FOUND
+                )
+            logger.info(
+                "Location with id %s was deleted from session",
+                location_id,
+            )
+            await self.task_publisher.delete_favorite_locations(location_id=location_id)
+            logger.info(
+                "Task for deleting favorite location %s was successfully published",
+                location_id,
+            )
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            logger.exception(
+                "Failed to delete location with id %s. Transaction rolled back",
+                location_id,
+            )
+            raise
         logger.info("Location with id %s was successfully deleted", location_id)
 
 

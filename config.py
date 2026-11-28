@@ -14,6 +14,29 @@ class Settings(BaseSettings):
     jwt_secret: str = "secretsecretsecret"
     jwt_algorithm: str = "HS256"
 
+    # =========================
+    # Redis
+    # =========================
+    redis_url: str = Field(
+        validation_alias="REDIS_URL",
+        default="redis://redis:6379/0",
+    )
+    redis_ttl: int = Field(
+        validation_alias="REDIS_TTL",
+        default=300,
+    )
+    # =========================
+    # Celery
+    # =========================
+    celery_broker_url: str = Field(
+        validation_alias="CELERY_BROKER_URL",
+        default="redis://redis:6379/1",
+    )
+    celery_result_backend: str = Field(
+        validation_alias="CELERY_RESULT_BACKEND",
+        default="redis://redis:6379/2",
+    )
+
     db_host: str = Field(
         validation_alias="DB_LOCATION_SERVICE_HOST", default="127.0.0.1"
     )

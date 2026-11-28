@@ -561,3 +561,20 @@ async def admin_delete_location_by_id(session: AsyncSession, location_id: int) -
     await session.commit()
 
     return True
+
+
+async def admin_delete_location_by_id_without_commit(
+    session: AsyncSession, location_id: int
+) -> bool:
+    """
+    Удаляет локацию по id, без фиксации транзакции.
+    Возвращает True если удален, иначе False.
+    """
+    location = (
+        await session.execute(select(Location).where(Location.id == location_id))
+    ).scalar_one_or_none()
+
+    if not location:
+        return False
+    await session.delete(location)
+    return True
